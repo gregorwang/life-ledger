@@ -8,6 +8,7 @@ import type {
   ExportVerification,
   GameLibraryItem,
   ImportDryRunReport,
+  LedgerProfile,
   MediaWorkDetail,
   MediaWorkSummary,
   MutationResult,
@@ -237,7 +238,22 @@ export async function loadDashboard(signal?: AbortSignal) {
     works: dashboard.anime.map(mapWork),
     exports: dashboard.exports.map(mapExport),
     settings: dashboard.settings,
+    profile: dashboard.profile ?? EMPTY_PROFILE,
   };
+}
+
+export const EMPTY_PROFILE: LedgerProfile = {
+  displayName: null,
+  signature: null,
+  avatarUrl: null,
+  coverUrl: null,
+};
+
+export async function saveProfile(profile: LedgerProfile): Promise<LedgerProfile> {
+  return requestJson<LedgerProfile>("/api/v1/profile", {
+    method: "PUT",
+    body: JSON.stringify(profile),
+  });
 }
 
 export async function loadScreenWorks(signal?: AbortSignal) {
@@ -448,6 +464,19 @@ export async function updateEntryBody(
         bodyRaw,
         reason: "网页校对",
       }),
+    }),
+  );
+}
+
+export async function updateEntryTags(
+  entry: LedgerEntry,
+  tags: string[],
+  reason: string,
+): Promise<LedgerEntry> {
+  return mapEntry(
+    await requestJson<EntryDetail>(`/api/v1/entries/${encodeURIComponent(entry.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ versionNo: entry.versionNo, tags, reason }),
     }),
   );
 }

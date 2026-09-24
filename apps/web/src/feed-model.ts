@@ -1,3 +1,5 @@
+import { MOOD_TAG_PREFIX } from "@life-ledger/contracts";
+
 import { formatOccurredAt } from "./date-display";
 import type { EntryMediaItem, EntryType, LedgerEntry } from "./models";
 import { compareEntriesByOccurredAtDesc } from "./timeline-order";
@@ -150,7 +152,9 @@ const SYSTEM_TAGS = new Set<string>([
 ]);
 
 export function visibleTags(entry: LedgerEntry): string[] {
-  return entry.tags.filter((tag) => !SYSTEM_TAGS.has(tag));
+  return entry.tags.filter(
+    (tag) => !SYSTEM_TAGS.has(tag) && !tag.startsWith(MOOD_TAG_PREFIX),
+  );
 }
 
 const MEDIA_ONLY_MARKERS = new Set(["[照片]", "[视频]", "[照片和视频]"]);

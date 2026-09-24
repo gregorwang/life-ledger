@@ -8,11 +8,14 @@ import {
   entryTypeSchema,
   listMediaWorksInputSchema,
   logMediaInputSchema,
+  moodFromTags,
   normalizeMediaTitle,
+  profileSchema,
   publicTimelineResponseSchema,
   registerEntryMediaInputSchema,
   scoreToInteger,
   updateGameLibraryItemInputSchema,
+  withMoodTag,
 } from "./index";
 
 describe("Life Ledger contracts", () => {
@@ -254,6 +257,47 @@ describe("Life Ledger contracts", () => {
       { objectKey: "covers/anime/x-v1.webp", kind: "image", mimeType: "image/webp", sizeBytes: 10 },
     ]) {
       expect(() => registerEntryMediaInputSchema.parse(invalid)).toThrow();
+    }
+  });
+
+  it("stores one mood emoji as a tag and reads it back", () => {
+    const tags = withMoodTag(["mood:😢", "散步"], "😌");
+    expect(tags).toEqual(["mood:😌", "散步"]);
+    expect(moodFromTags(tags)).toBe("😌");
+    expect(withMoodTag(tags, null)).toEqual(["散步"]);
+    expect(moodFromTags(["散步"])).toBeNull();
+    expect(withMoodTag(Array.from({ length: 30 }, (_, i) => `t${i}`), "😄")).toHaveLength(30);
+  });
+
+  it("keeps emoji in raw text and accepts a mood on capture", () => {
+    const parsed = captureEntryInputSchema.parse({
+      rawText: "今天好累 😮‍💨 但是吃到了拉面 🍜",
+      occurredAt: "2026-09-24T12:00:00+09:00",
+      source: { channel: "mcp", messageId: "m1", conversationId: null },
+      mood: "🥱",
+    });
+    expect(parsed.rawText).toBe("今天好累 😮‍💨 但是吃到了拉面 🍜");
+    expect(parsed.mood).toBe("🥱");
+  });
+
+  it("only lets the profile point at private entry-media images", () => {
+    expect(profileSchema.parse({})).toEqual({
+      displayName: null,
+      signature: null,
+      avatarUrl: null,
+      coverUrl: null,
+    });
+    expect(
+      profileSchema.parse({
+        avatarUrl: "/media/entry-media/0f8fad5b-d9cb-469f-a165-70867728950e.webp",
+      }).avatarUrl,
+    ).toContain("entry-media");
+    for (const url of [
+      "https://example.com/a.webp",
+      "/media/entry-media/0f8fad5b-d9cb-469f-a165-70867728950e.mp4",
+      "/media/entry-media/../secret.webp",
+    ]) {
+      expect(() => profileSchema.parse({ coverUrl: url })).toThrow();
     }
   });
 });

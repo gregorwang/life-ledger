@@ -285,6 +285,8 @@ export const captureEntryInputSchema = z.object({
   source: sourceSchema,
   visibility: z.literal("private").default("private"),
   mediaIds: entryMediaIdsSchema,
+  /** Mood emoji such as "😊"; stored as a `mood:` tag and implies type "mood". */
+  mood: z.string().trim().min(1).max(16).optional(),
 });
 
 export const logMediaInputSchema = z
@@ -584,6 +586,52 @@ export const settingsSchema = z.object({
   retentionWeekly: z.number().int().min(4).max(52),
 });
 
+/** Tag prefix that carries a mood emoji, e.g. `mood:😊`. */
+export const MOOD_TAG_PREFIX = "mood:";
+
+export const MOOD_PRESETS = [
+  { emoji: "😄", label: "开心" },
+  { emoji: "🥰", label: "幸福" },
+  { emoji: "🤩", label: "兴奋" },
+  { emoji: "😌", label: "平静" },
+  { emoji: "🤔", label: "在想事" },
+  { emoji: "😶", label: "无感" },
+  { emoji: "😴", label: "困了" },
+  { emoji: "🥲", label: "感动" },
+  { emoji: "😢", label: "难过" },
+  { emoji: "😰", label: "焦虑" },
+  { emoji: "😤", label: "烦躁" },
+  { emoji: "😡", label: "生气" },
+] as const;
+
+export function moodFromTags(tags: readonly string[]): string | null {
+  const tag = tags.find((item) => item.startsWith(MOOD_TAG_PREFIX));
+  const mood = tag?.slice(MOOD_TAG_PREFIX.length).trim();
+  return mood ? mood : null;
+}
+
+export function withMoodTag(tags: readonly string[], mood: string | null): string[] {
+  const rest = tags.filter((tag) => !tag.startsWith(MOOD_TAG_PREFIX));
+  return (mood ? [`${MOOD_TAG_PREFIX}${mood}`, ...rest] : rest).slice(0, 30);
+}
+
+/** Only private, already-uploaded entry media may back the avatar or cover. */
+export const PROFILE_IMAGE_URL_PATTERN =
+  /^\/media\/entry-media\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(?:jpg|png|webp|gif)$/;
+
+const profileImageUrlSchema = z
+  .string()
+  .regex(PROFILE_IMAGE_URL_PATTERN)
+  .nullable()
+  .default(null);
+
+export const profileSchema = z.object({
+  displayName: z.string().trim().min(1).max(40).nullable().default(null),
+  signature: z.string().trim().max(80).nullable().default(null),
+  avatarUrl: profileImageUrlSchema,
+  coverUrl: profileImageUrlSchema,
+});
+
 export const importDryRunInputSchema = z.object({
   sourceName: z.string().trim().min(1).max(300),
   records: z.array(z.record(z.string(), z.unknown())).max(5_000),
@@ -634,6 +682,7 @@ export type CreateEntryMediaUploadInput = z.infer<
 >;
 export type ConfirmActionInput = z.infer<typeof confirmActionInputSchema>;
 export type LedgerSettings = z.infer<typeof settingsSchema>;
+export type LedgerProfile = z.infer<typeof profileSchema>;
 export type LedgerStatsInput = z.input<typeof ledgerStatsInputSchema>;
 export type ListTagsInput = z.input<typeof listTagsInputSchema>;
 export type OnThisDayInput = z.input<typeof onThisDayInputSchema>;
@@ -947,6 +996,7 @@ export interface DashboardResponse {
   entries: EntrySummary[];
   anime: AnimeWorkSummary[];
   settings: LedgerSettings;
+  profile: LedgerProfile;
   exports: ExportRecord[];
   generatedAt: string;
 }
@@ -1102,6 +1152,8 @@ export interface CoreBinding {
   getOnThisDay(input?: OnThisDayInput): Promise<OnThisDayResult>;
   getSettings(): Promise<LedgerSettings>;
   updateSettings(settings: LedgerSettings): Promise<LedgerSettings>;
+  getProfile(): Promise<LedgerProfile>;
+  updateProfile(profile: LedgerProfile): Promise<LedgerProfile>;
   createImportDryRun(input: ImportDryRunInput): Promise<ImportDryRunReport>;
   commitImport(batchId: string): Promise<ImportDryRunReport>;
   listExports(): Promise<ExportRecord[]>;

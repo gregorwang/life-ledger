@@ -34,6 +34,9 @@ import {
   publicTimelineResponseSchema,
   scoreToInteger,
   settingsSchema,
+  profileSchema,
+  withMoodTag,
+  type LedgerProfile,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
   updateMediaSeasonInputSchema,
@@ -1768,6 +1771,9 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     }
 
     await this.#assertAttachableMedia(parsed.mediaIds);
+    const entryType =
+      parsed.mood && parsed.type === "note" ? "mood" : parsed.type;
+    const tags = parsed.mood ? withMoodTag(parsed.tags, parsed.mood) : parsed.tags;
     const entryId = createId("ent");
     const requestId = createId("req");
     const createdAt = nowIso();
@@ -1795,7 +1801,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       `).bind(
         entryId,
         USER_ID,
-        parsed.type,
+        entryType,
         title,
         parsed.rawText,
         plainText(parsed.rawText),
@@ -1808,7 +1814,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         parsed.source.messageId,
         parsed.source.conversationId,
         requestHash,
-        JSON.stringify(parsed.tags),
+        JSON.stringify(tags),
         createdAt,
         createdAt,
       ),
@@ -3900,14 +3906,64 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     });
   }
 
+  async #readSettingsJson(): Promise<Record<string, unknown>> {
+    const row = await this.env.DB.prepare(`
+      SELECT settings_json FROM users WHERE id = ?
+    `)
+      .bind(USER_ID)
+      .first<{ settings_json: string }>();
+    if (!row) {
+      throw new LedgerDomainError("USER_NOT_FOUND", "Primary user not found.", 500);
+    }
+    return safeRecord(row.settings_json);
+  }
+
+  async getProfile(): Promise<LedgerProfile> {
+    const raw = await this.#readSettingsJson();
+    const stored = profileSchema.safeParse(
+      typeof raw.profile === "object" && raw.profile !== null ? raw.profile : {},
+    );
+    return stored.success ? stored.data : profileSchema.parse({});
+  }
+
+  async updateProfile(profile: LedgerProfile): Promise<LedgerProfile> {
+    const parsed = profileSchema.parse(profile);
+    const raw = await this.#readSettingsJson();
+    const timestamp = nowIso();
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        UPDATE users SET settings_json = ?, updated_at = ?
+        WHERE id = ?
+      `).bind(JSON.stringify({ ...raw, profile: parsed }), timestamp, USER_ID),
+      this.#auditStatement(
+        createId("req"),
+        "user",
+        ACTOR_USER,
+        "profile.updated",
+        USER_ID,
+        "Profile name, signature, avatar or cover updated.",
+        timestamp,
+        "user",
+      ),
+    ]);
+    return parsed;
+  }
+
   async updateSettings(settings: LedgerSettings): Promise<LedgerSettings> {
     const parsed = settingsSchema.parse(settings);
+    // Keep keys owned by other writers (e.g. profile) intact.
+    const raw = await this.#readSettingsJson();
     const timestamp = nowIso();
     await this.env.DB.batch([
       this.env.DB.prepare(`
         UPDATE users SET timezone = ?, settings_json = ?, updated_at = ?
         WHERE id = ?
-      `).bind(parsed.timezone, JSON.stringify(parsed), timestamp, USER_ID),
+      `).bind(
+        parsed.timezone,
+        JSON.stringify({ ...raw, ...parsed }),
+        timestamp,
+        USER_ID,
+      ),
       this.#auditStatement(
         createId("req"),
         "user",

@@ -83,9 +83,20 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 - 移除动态里的照片/视频：`confirmRemove=true`（文件会从存储中删除）
 - 删除补充：`confirmDelete=true`
 
+## 表情与心情
+
+正文、补充、标签和评价都是 UTF-8 原样保存，emoji（包括 👨‍👩‍👧 这类组合表情）
+不会被过滤或转码。上限按 JavaScript 字符串长度计算：正文与补充 50,000，
+标签 80；一个 emoji 通常占 2 个长度单位，组合表情会更多。
+
+记心情时给 `capture_entry` 传 `mood`（一个表情，≤ 16 个长度单位），例如
+`"mood": "😌"`。`type` 省略时会自动记为 `mood`，网页在这条动态的名字旁显示
+「😌 平静」。它以 `mood:😌` 标签的形式存储，所以 `update_entry` 改 `tags`
+也能换心情；网页也可以直接点动态上的心情重新选择。
+
 ## 给动态附照片和视频
 
-网页「今日与时间线」里的每条动态最多 9 个照片/视频。Agent 先上传拿到
+网页「日常」里的每条动态最多 9 个照片/视频。Agent 先上传拿到
 `mediaId`，再把它放进 `capture_entry` / `log_media` 的 `mediaIds`：
 
 1. **小照片（解码后 ≤ 10 MB）**：`upload_entry_media`，传

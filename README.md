@@ -5,7 +5,7 @@ Life Ledger 是一个默认私有、保留原文、可修订、可撤回、可�
 ## 当前交付
 
 - React + Vite + Cloudflare Workers Static Assets 管理端
-- 响应式时间线、动漫库、作品详情、记录详情、搜索、导入、导出、设置和回收站
+- 响应式「日常」动态（可自定义头像、背景、名字与签名，带表情与心情选择）、动漫库、游戏库、作品详情、记录详情、搜索、导入、导出、设置和回收站
 - 私人 / 待确认 / 公开状态机，以及发布预览 + 文本确认
 - 软删除、恢复为私人、永久清除文本确认
 - D1 schema migration、独立开发 seed、Core WorkerEntrypoint RPC

@@ -97,6 +97,15 @@ const captureEntryToolSchema = z.object({
   idempotencyKey: z.string().trim().min(1).max(256),
   conversationId: z.string().trim().min(1).max(256).nullable().default(null),
   mediaIds: mediaIdsToolSchema,
+  mood: z
+    .string()
+    .trim()
+    .min(1)
+    .max(16)
+    .optional()
+    .describe(
+      "可选的心情表情，例如 😄 开心、😌 平静、😢 难过、😰 焦虑；传了就显示为这条动态的心情，type 省略时自动记为 mood。",
+    ),
 });
 
 const logMediaToolSchema = z.object({
@@ -522,7 +531,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "创建私密记录",
       description:
-        "创建想法、心情或笔记，会出现在网页「今日与时间线」动态里。新记录强制为私密；必须提供来源渠道与幂等键，重试不会重复写入。要附照片/视频时，先上传拿到 mediaId，再通过 mediaIds 传入。",
+        "创建想法、心情或笔记，会出现在网页「日常」动态里。正文原样保存，支持 emoji；心情用 mood 字段传一个表情。新记录强制为私密；必须提供来源渠道与幂等键，重试不会重复写入。要附照片/视频时，先上传拿到 mediaId，再通过 mediaIds 传入。",
       inputSchema: captureEntryToolSchema,
       annotations: {
         ...safeWriteAnnotations,
@@ -548,6 +557,7 @@ export function createServer(core: McpCoreBinding): McpServer {
             },
             visibility: "private",
             mediaIds: input.mediaIds,
+            ...(input.mood ? { mood: input.mood } : {}),
           }),
         ),
       ),

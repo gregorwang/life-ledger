@@ -1,23 +1,116 @@
 import type { GameLibraryItem } from "@life-ledger/contracts";
 import {
   Clock3,
+  ExternalLink,
   Gamepad2,
-  Gem,
-  Sparkles,
+  Search,
+  Star,
   Trophy,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { loadGameLibrary } from "./api";
+import "./game-library.css";
 
 type GameFilter = "all" | "completed" | "playing";
+type GameSort = "rating" | "hours" | "progress" | "title";
+
+const FILTERS: ReadonlyArray<readonly [GameFilter, string]> = [
+  ["all", "全部"],
+  ["completed", "已通关"],
+  ["playing", "还在玩"],
+];
+
+const SORTS: ReadonlyArray<readonly [GameSort, string]> = [
+  ["rating", "评分最高"],
+  ["hours", "玩得最久"],
+  ["progress", "完成度"],
+  ["title", "按名称"],
+];
+
+function hoursOf(game: GameLibraryItem): number {
+  const hours = Number.parseFloat(game.playTime);
+  return Number.isFinite(hours) ? hours : 0;
+}
+
+function matchesFilter(game: GameLibraryItem, filter: GameFilter): boolean {
+  if (filter === "completed") return game.progress === 100;
+  if (filter === "playing") return game.progress < 100;
+  return true;
+}
+
+function compareGames(sort: GameSort) {
+  return (left: GameLibraryItem, right: GameLibraryItem): number => {
+    switch (sort) {
+      case "rating":
+        return right.rating - left.rating || hoursOf(right) - hoursOf(left);
+      case "hours":
+        return hoursOf(right) - hoursOf(left);
+      case "progress":
+        return right.progress - left.progress || right.rating - left.rating;
+      case "title":
+        return left.title.localeCompare(right.title, "zh-CN");
+    }
+  };
+}
+
+/** Stable hue per title so a missing cover still looks intentional. */
+function coverHue(title: string): number {
+  let hash = 0;
+  for (const char of title) {
+    hash = (hash * 31 + char.codePointAt(0)!) % 360;
+  }
+  return hash;
+}
+
+function GameCover({
+  game,
+  eager = false,
+}: {
+  game: GameLibraryItem;
+  eager?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed || !game.coverUrl) {
+    const hue = coverHue(game.title);
+    return (
+      <span
+        className="gl-cover-fallback"
+        style={{
+          background: `linear-gradient(135deg, hsl(${hue} 42% 32%), hsl(${(hue + 40) % 360} 48% 18%))`,
+        }}
+        aria-hidden="true"
+      >
+        {Array.from(game.title)[0]}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={game.coverUrl}
+      alt=""
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
+      width="720"
+      height="405"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export function GameLibraryPage() {
   const [items, setItems] = useState<GameLibraryItem[]>([]);
   const [filter, setFilter] = useState<GameFilter>("all");
+  const [sort, setSort] = useState<GameSort>("rating");
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const searchId = useId();
+  const sortId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -33,174 +126,275 @@ export function GameLibraryPage() {
     return () => controller.abort();
   }, []);
 
-  const visibleItems = useMemo(
+  const counts = useMemo(
     () =>
-      items.filter((item) => {
-        if (filter === "completed") return item.progress === 100;
-        if (filter === "playing") return item.progress < 100;
-        return true;
-      }),
-    [filter, items],
+      Object.fromEntries(
+        FILTERS.map(([value]) => [
+          value,
+          items.filter((game) => matchesFilter(game, value)).length,
+        ]),
+      ) as Record<GameFilter, number>,
+    [items],
   );
-  const totalHours = items.reduce(
-    (total, item) => total + Number.parseFloat(item.playTime) || total,
-    0,
-  );
-  const totalAchievements = items.reduce(
-    (total, item) => total + item.achievementsCurrent,
-    0,
-  );
-  const platinum = items.reduce(
-    (total, item) => total + item.trophies.platinum,
-    0,
-  );
+
+  const visibleItems = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return items
+      .filter((game) => matchesFilter(game, filter))
+      .filter(
+        (game) =>
+          !needle ||
+          game.title.toLowerCase().includes(needle) ||
+          game.tags.some((tag) => tag.toLowerCase().includes(needle)),
+      )
+      .sort(compareGames(sort));
+  }, [filter, items, query, sort]);
+
+  const totalHours = items.reduce((total, game) => total + hoursOf(game), 0);
+  const platinum = items.reduce((total, game) => total + game.trophies.platinum, 0);
+  const openGame = openId ? items.find((game) => game.id === openId) ?? null : null;
 
   return (
-    <div className="page game-library-page">
-      <section className="game-hero">
-        <div className="game-hero-scan" aria-hidden="true" />
-        <div className="game-hero-copy">
-          <p className="eyebrow">PLAY MEMORY / 私人游玩收藏</p>
-          <h1>
-            游戏库
-            <span>PLAY ARCHIVE</span>
-          </h1>
-          <p>
-            每一张封面就是一段玩过的世界。这里直接陈列完成度、奖杯、评分和当时的评价，
-            不再套一层与全站脱节的主机后台。
+    <div className="page gl-page">
+      <header className="gl-head">
+        <div className="gl-title">
+          <p className="gl-eyebrow">
+            <Gamepad2 aria-hidden="true" size={14} />
+            PLAY ARCHIVE
           </p>
+          <h1>游戏库</h1>
+          <p className="gl-lede">玩过的世界、拿到的奖杯，还有通关那天的一句话。</p>
         </div>
-        <div className="game-pad-mark" aria-hidden="true">
-          <Gamepad2 />
-          <span>遊んだ記憶</span>
-        </div>
-        <div className="game-summary">
+        <dl className="gl-stats">
           <div>
-            <span>游戏总数</span>
-            <strong>{items.length || "—"}</strong>
+            <dt>款游戏</dt>
+            <dd>{items.length || "—"}</dd>
           </div>
           <div>
-            <span>累计时长</span>
-            <strong>{items.length ? `${Math.round(totalHours)}h` : "—"}</strong>
+            <dt>小时</dt>
+            <dd>{items.length ? Math.round(totalHours).toLocaleString() : "—"}</dd>
           </div>
           <div>
-            <span>已解锁成就</span>
-            <strong>{items.length ? totalAchievements.toLocaleString() : "—"}</strong>
+            <dt>已通关</dt>
+            <dd>{items.length ? counts.completed : "—"}</dd>
           </div>
           <div>
-            <span>白金奖杯</span>
-            <strong>{items.length ? platinum : "—"}</strong>
+            <dt>白金奖杯</dt>
+            <dd>{items.length ? platinum : "—"}</dd>
           </div>
-        </div>
-      </section>
+        </dl>
+      </header>
 
-      <section className="game-catalog-section">
-        <header className="game-catalog-header">
-          <div>
-            <p className="eyebrow">YOUR PLAY LIBRARY</p>
-            <h2>游玩收藏</h2>
-            <p className="game-catalog-intro">
-              封面、进度与评价同屏呈现；筛选只改变眼前这面作品墙。
-            </p>
-          </div>
-          <div className="game-filter" role="group" aria-label="筛选游戏">
-            {(
-              [
-                ["all", "全部"],
-                ["completed", "已完成"],
-                ["playing", "推进中"],
-              ] as const
-            ).map(([value, label]) => (
+      <div className="gl-toolbar">
+        <div className="gl-filter" role="group" aria-label="筛选游戏">
+          {FILTERS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={filter === value ? "is-active" : ""}
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+              <span>{items.length ? counts[value] : ""}</span>
+            </button>
+          ))}
+        </div>
+        <div className="gl-tools">
+          <label className="gl-search" htmlFor={searchId}>
+            <Search aria-hidden="true" size={15} />
+            <span className="sr-only">搜索游戏</span>
+            <input
+              id={searchId}
+              type="search"
+              value={query}
+              placeholder="搜索名字或标签"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <label className="gl-sort" htmlFor={sortId}>
+            <span className="sr-only">排序</span>
+            <select
+              id={sortId}
+              value={sort}
+              onChange={(event) => setSort(event.target.value as GameSort)}
+            >
+              {SORTS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      {loadState === "loading" ? (
+        <div className="gl-state" role="status">
+          <Gamepad2 aria-hidden="true" />
+          正在读取游戏档案…
+        </div>
+      ) : loadState === "error" ? (
+        <div className="gl-state is-error" role="alert">
+          游戏库暂时读不出来，请稍后刷新重试。
+        </div>
+      ) : visibleItems.length === 0 ? (
+        <div className="gl-state">
+          {items.length ? "没有符合条件的游戏。" : "游戏库还是空的，可以通过 MCP 添加。"}
+        </div>
+      ) : (
+        <ul className="gl-grid">
+          {visibleItems.map((game, index) => (
+            <li key={game.id}>
               <button
-                key={value}
-                className={filter === value ? "is-active" : ""}
                 type="button"
-                aria-pressed={filter === value}
-                onClick={() => setFilter(value)}
+                className="gl-card"
+                aria-haspopup="dialog"
+                onClick={() => setOpenId(game.id)}
               >
-                {label}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        {loadState === "loading" ? (
-          <div className="game-load-state" role="status">
-            <Gamepad2 aria-hidden="true" />
-            正在读取 D1 游戏档案…
-          </div>
-        ) : loadState === "error" ? (
-          <div className="game-load-state is-error" role="alert">
-            游戏事实层暂时不可用，请稍后重试。
-          </div>
-        ) : (
-          <div className="game-grid">
-            {visibleItems.map((game, index) => (
-              <article
-                className={`game-card ${index % 7 === 0 ? "is-featured" : ""}`}
-                key={game.id}
-              >
-                <div className="game-card-cover">
-                  <img
-                    src={game.coverUrl}
-                    alt={`${game.title} 游戏封面`}
-                    loading={index < 4 ? "eager" : "lazy"}
-                    fetchPriority={index < 2 ? "high" : "auto"}
-                    decoding="async"
-                    width="720"
-                    height="405"
-                  />
-                  <span className="game-rating">
-                    {game.rating.toFixed(1)}
-                    <small>/ 10</small>
-                  </span>
-                </div>
-                <div className="game-card-body">
-                  <div className="game-card-title-row">
-                    <div>
-                      <p>PLAY MEMORY · {game.platform.toUpperCase()}</p>
-                      <h3>{game.title}</h3>
-                    </div>
-                    <span className="game-complete-mark">
-                      <Sparkles aria-hidden="true" size={14} />
-                      {game.progress === 100 ? "已完成" : "推进中"}
+                <span className="gl-cover">
+                  <GameCover game={game} eager={index < 6} />
+                  {game.progress === 100 ? (
+                    <span className="gl-done">
+                      <Trophy aria-hidden="true" size={12} />
+                      已通关
                     </span>
-                  </div>
-                  <div className="game-progress">
-                    <div>
-                      <span>完成度</span>
-                      <strong>{game.progress}%</strong>
-                    </div>
-                    <i>
-                      <b style={{width: `${game.progress}%`}} />
-                    </i>
-                  </div>
-                  <div className="game-metrics">
+                  ) : null}
+                </span>
+                <span className="gl-card-body">
+                  <span className="gl-card-top">
+                    <strong className="gl-card-title">{game.title}</strong>
+                    <span className="gl-score" aria-label={`评分 ${game.rating.toFixed(1)}`}>
+                      <Star aria-hidden="true" size={12} />
+                      {game.rating.toFixed(1)}
+                    </span>
+                  </span>
+                  <span className="gl-meta">
                     <span>
-                      <Clock3 aria-hidden="true" size={15} />
+                      <Clock3 aria-hidden="true" size={13} />
                       {game.playTime}
                     </span>
                     <span>
-                      <Trophy aria-hidden="true" size={15} />
+                      <Trophy aria-hidden="true" size={13} />
                       {game.achievementsCurrent}/{game.achievementsTotal}
                     </span>
-                    <span>
-                      <Gem aria-hidden="true" size={15} />
-                      白金 {game.trophies.platinum}
-                    </span>
-                  </div>
-                  <p className="game-review">“{game.review}”</p>
-                  <div className="game-tags">
-                    {game.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                    <span className="gl-meta-progress">{game.progress}%</span>
+                  </span>
+                  <span className="gl-bar" aria-hidden="true">
+                    <i style={{ width: `${game.progress}%` }} />
+                  </span>
+                  {game.review ? <span className="gl-quote">{game.review}</span> : null}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {openGame ? <GameDetail game={openGame} onClose={() => setOpenId(null)} /> : null}
     </div>
+  );
+}
+
+const TROPHY_TIERS = [
+  ["platinum", "白金"],
+  ["gold", "金"],
+  ["silver", "银"],
+  ["bronze", "铜"],
+] as const;
+
+function GameDetail({
+  game,
+  onClose,
+}: {
+  game: GameLibraryItem;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="gl-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="gl-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="gl-dialog-cover">
+          <GameCover game={game} eager />
+          <button
+            ref={closeRef}
+            type="button"
+            className="gl-dialog-close"
+            aria-label="关闭"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" size={18} />
+          </button>
+        </div>
+        <div className="gl-dialog-body">
+          <p className="gl-eyebrow">{game.platform}</p>
+          <div className="gl-dialog-title">
+            <h2 id={titleId}>{game.title}</h2>
+            <span className="gl-score is-large">
+              <Star aria-hidden="true" size={15} />
+              {game.rating.toFixed(1)}
+              <small>/ 10</small>
+            </span>
+          </div>
+          {game.review ? <blockquote className="gl-dialog-quote">{game.review}</blockquote> : null}
+          <dl className="gl-dialog-facts">
+            <div>
+              <dt>游玩时长</dt>
+              <dd>{game.playTime}</dd>
+            </div>
+            <div>
+              <dt>完成度</dt>
+              <dd>{game.progress}%</dd>
+            </div>
+            <div>
+              <dt>奖杯</dt>
+              <dd>
+                {game.achievementsCurrent}/{game.achievementsTotal}
+              </dd>
+            </div>
+          </dl>
+          <ul className="gl-trophies" aria-label="奖杯分布">
+            {TROPHY_TIERS.map(([tier, label]) => (
+              <li key={tier} className={`is-${tier}`}>
+                <i aria-hidden="true" />
+                {label}
+                <strong>{game.trophies[tier]}</strong>
+              </li>
+            ))}
+          </ul>
+          {game.tags.length ? (
+            <div className="gl-tags">
+              {game.tags.map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+          ) : null}
+          {game.sourceUrl ? (
+            <a className="gl-source" href={game.sourceUrl} target="_blank" rel="noreferrer">
+              <ExternalLink aria-hidden="true" size={13} />
+              数据来源
+            </a>
+          ) : null}
+        </div>
+      </section>
+    </div>,
+    document.body,
   );
 }

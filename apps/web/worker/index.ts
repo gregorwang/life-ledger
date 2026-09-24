@@ -14,6 +14,7 @@ import {
   listMediaWorksInputSchema,
   logMediaInputSchema,
   settingsSchema,
+  profileSchema,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
   type CoreBinding,
@@ -792,7 +793,7 @@ app.get("/api/v1/health", async (context) => {
 });
 
 app.get("/api/v1/bootstrap", async (context) => {
-  const [activeEntries, deletedEntries, anime, settings, exports] = await Promise.all([
+  const [activeEntries, deletedEntries, anime, settings, profile, exports] = await Promise.all([
     context.env.CORE.listEntries(
       listEntriesInputSchema.parse({ status: "active", limit: 100 }),
     ),
@@ -801,12 +802,15 @@ app.get("/api/v1/bootstrap", async (context) => {
     ),
     context.env.CORE.listAnime(),
     context.env.CORE.getSettings(),
+    // Tolerate a Core deployed before this Web build; the profile is cosmetic.
+    context.env.CORE.getProfile().catch(() => profileSchema.parse({})),
     context.env.CORE.listExports(),
   ]);
   const response = {
     entries: [...activeEntries, ...deletedEntries],
     anime,
     settings,
+    profile,
     exports,
     generatedAt: new Date().toISOString(),
   } satisfies DashboardResponse;
@@ -1254,6 +1258,15 @@ app.get("/api/v1/settings", async (context) => {
 app.put("/api/v1/settings", async (context) => {
   const body: unknown = await context.req.json();
   return context.json(await context.env.CORE.updateSettings(settingsSchema.parse(body)));
+});
+
+app.get("/api/v1/profile", async (context) => {
+  return context.json(await context.env.CORE.getProfile());
+});
+
+app.put("/api/v1/profile", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(await context.env.CORE.updateProfile(profileSchema.parse(body)));
 });
 
 app.post("/api/v1/imports/dry-run", async (context) => {

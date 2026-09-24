@@ -101,6 +101,10 @@ describe("feed post helpers", () => {
     expect(visibleTags(entry({ tags: ["thought", "episode", "散步"] }))).toEqual(["散步"]);
   });
 
+  it("keeps the mood tag out of the hashtag row", () => {
+    expect(visibleTags(entry({ tags: ["mood:😌", "散步"] }))).toEqual(["散步"]);
+  });
+
   it("marks media-only posts so the placeholder text is not rendered", () => {
     const media = [
       {

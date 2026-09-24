@@ -57,9 +57,12 @@ import {
   useRef,
   useState,
 } from "react";
-import type {
-  ImportDryRunReport,
-  PendingAction,
+import {
+  MOOD_TAG_PREFIX,
+  withMoodTag,
+  type ImportDryRunReport,
+  type LedgerProfile,
+  type PendingAction,
 } from "@life-ledger/contracts";
 
 import {
@@ -70,6 +73,7 @@ import {
   createExport as apiCreateExport,
   createImportDryRun as apiCreateImportDryRun,
   deleteEntryFollowUp as apiDeleteEntryFollowUp,
+  EMPTY_PROFILE,
   exportDownloadUrl,
   loadDashboard,
   loadEntry,
@@ -77,8 +81,10 @@ import {
   mutateEntry as apiMutateEntry,
   preparePublish as apiPreparePublish,
   purgeEntry as apiPurgeEntry,
+  saveProfile as apiSaveProfile,
   saveSettings as apiSaveSettings,
   updateEntryBody,
+  updateEntryTags,
   verifyExport as apiVerifyExport,
 } from "./api";
 import {
@@ -139,6 +145,13 @@ type AppRoute =
   | { kind: "trash" }
   | { kind: "settings" };
 
+/** Mood tags (`mood:😊`) read as a mood, everything else as a hashtag. */
+function displayTag(tag: string): string {
+  return tag.startsWith(MOOD_TAG_PREFIX)
+    ? `心情 ${tag.slice(MOOD_TAG_PREFIX.length)}`
+    : `#${tag}`;
+}
+
 interface NavigationItem {
   label: string;
   path: string;
@@ -149,7 +162,7 @@ interface NavigationItem {
 
 const NAV_ITEMS = [
   {
-    label: "今日与时间线",
+    label: "日常",
     path: ROUTES.timeline,
     icon: Inbox,
     section: "main",
@@ -376,6 +389,7 @@ export function App() {
       window.localStorage.getItem(TIME_ZONE_STORAGE_KEY) ||
       demoSettings.timezone,
   }));
+  const [profile, setProfile] = useState<LedgerProfile>(EMPTY_PROFILE);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const navigate = (path: string) => {
@@ -410,6 +424,7 @@ export function App() {
         setWorks(dashboard.works);
         setExports(dashboard.exports);
         setSettings(dashboard.settings);
+        setProfile(dashboard.profile);
         window.localStorage.setItem(
           TIME_ZONE_STORAGE_KEY,
           dashboard.settings.timezone,
@@ -558,6 +573,38 @@ export function App() {
         "保存失败",
         error instanceof Error ? error.message : "事实层暂时不可用。",
       );
+    }
+  };
+
+  const saveProfile = async (next: LedgerProfile): Promise<boolean> => {
+    try {
+      setProfile(await apiSaveProfile(next));
+      pushToast("success", "资料已更新", "头像、背景和签名只保存在你自己的账本里。");
+      return true;
+    } catch (error: unknown) {
+      pushToast(
+        "danger",
+        "资料未保存",
+        error instanceof Error ? error.message : "事实层暂时不可用。",
+      );
+      return false;
+    }
+  };
+
+  const setEntryMood = async (entryId: string, mood: string | null) => {
+    const current = entries.find((entry) => entry.id === entryId);
+    if (!current) {
+      return;
+    }
+    try {
+      const updated = await updateEntryTags(
+        current,
+        withMoodTag(current.tags, mood),
+        mood ? `心情设为 ${mood}` : "清除心情",
+      );
+      updateEntry(entryId, () => updated);
+    } catch (error: unknown) {
+      pushToast("danger", "心情没有保存", error instanceof Error ? error.message : "请求失败。");
     }
   };
 
@@ -756,6 +803,11 @@ export function App() {
             route,
             composerSignal,
             onCreatePost: createPost,
+            profile,
+            onSaveProfile: saveProfile,
+            onSetMood: (entryId, mood) => {
+              void setEntryMood(entryId, mood);
+            },
             onOpenStructuredCapture: (seed) => {
               setCaptureSeed(seed);
               setCaptureOpen(true);
@@ -821,6 +873,9 @@ interface RenderRouteProps {
   route: AppRoute;
   composerSignal: number;
   onCreatePost: (post: NewPost) => Promise<boolean>;
+  profile: LedgerProfile;
+  onSaveProfile: (profile: LedgerProfile) => Promise<boolean>;
+  onSetMood: (entryId: string, mood: string | null) => void;
   onOpenStructuredCapture: (seed: CaptureDraftSeed) => void;
   onAddFollowUp: (entryId: string, body: string) => Promise<boolean>;
   onDeleteFollowUp: (entryId: string, followUpId: string) => void;
@@ -863,6 +918,9 @@ function renderRoute(props: RenderRouteProps): ReactNode {
           composerSignal={props.composerSignal}
           navigate={props.navigate}
           onCreatePost={props.onCreatePost}
+          profile={props.profile}
+          onSaveProfile={props.onSaveProfile}
+          onSetMood={props.onSetMood}
           onOpenStructuredCapture={props.onOpenStructuredCapture}
           onOpenCommand={props.onOpenCommand}
           onSoftDelete={props.onSoftDelete}
@@ -1020,7 +1078,7 @@ function Sidebar({
         <button
           className="brand"
           type="button"
-          aria-label="返回时间线"
+          aria-label="回到日常"
           onClick={() => onNavigate(ROUTES.timeline)}
         >
           <span className="brand-mark" aria-hidden="true">
@@ -1178,6 +1236,9 @@ interface TimelinePageProps {
   composerSignal: number;
   navigate: (path: string) => void;
   onCreatePost: (post: NewPost) => Promise<boolean>;
+  profile: LedgerProfile;
+  onSaveProfile: (profile: LedgerProfile) => Promise<boolean>;
+  onSetMood: (entryId: string, mood: string | null) => void;
   onOpenStructuredCapture: (seed: CaptureDraftSeed) => void;
   onOpenCommand: () => void;
   onSoftDelete: (entryId: string) => void;
@@ -1219,6 +1280,9 @@ function TimelinePage(props: TimelinePageProps) {
         timeZone={currentTimeZone()}
         composerSignal={props.composerSignal}
         onCreatePost={props.onCreatePost}
+        profile={props.profile}
+        onSaveProfile={props.onSaveProfile}
+        onSetMood={props.onSetMood}
         onOpenStructuredCapture={props.onOpenStructuredCapture}
         onOpenCommand={props.onOpenCommand}
         onOpenEntry={(entryId) => props.navigate(entryPath(entryId))}
@@ -1356,7 +1420,7 @@ function EntryCard({
         <div className="entry-card-footer">
           <div className="tag-row">
             {entry.tags.slice(0, 3).map((tag) => (
-              <span key={tag}>#{tag}</span>
+              <span key={tag}>{displayTag(tag)}</span>
             ))}
           </div>
           <span className="entry-source">
@@ -2186,7 +2250,7 @@ function EntryDetailPage({
           icon={FileClock}
           title="没有找到这条记录"
           detail="记录可能已被永久清除，或当前路由 ID 不存在。"
-          actionLabel="返回时间线"
+          actionLabel="回到日常"
           onAction={() => navigate(ROUTES.timeline)}
         />
       </div>
@@ -2197,7 +2261,7 @@ function EntryDetailPage({
     <div className="page entry-detail-page">
       <button className="back-button" type="button" onClick={() => navigate(ROUTES.timeline)}>
         <ArrowLeft aria-hidden="true" size={16} />
-        返回时间线
+        回到日常
       </button>
 
       <header className="entry-detail-header">
@@ -2394,7 +2458,7 @@ function EntryDetailPage({
               {entry.tags.map((tag) => (
                 <span key={tag}>
                   <Tag aria-hidden="true" size={12} />
-                  {tag}
+                  {displayTag(tag).replace(/^#/, "")}
                 </span>
               ))}
             </div>

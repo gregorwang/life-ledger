@@ -1,6 +1,7 @@
 import {
   ChevronLeft,
   ChevronRight,
+  Camera,
   Clapperboard,
   CornerDownRight,
   ExternalLink,
@@ -27,12 +28,22 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+  useCallback,
   useEffect,
   useId,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
+
+import {
+  MOOD_PRESETS,
+  moodFromTags,
+  withMoodTag,
+  type LedgerProfile,
+} from "@life-ledger/contracts";
 
 import {
   discardEntryMedia,
@@ -63,9 +74,26 @@ import type {
   ToastMessage,
 } from "./models";
 
-const OWNER_NAME = "汪家俊";
-const OWNER_INITIAL = "汪";
+const DEFAULT_NAME = "汪家俊";
+const DEFAULT_SIGNATURE = "日子是我的，记录也是。";
+const DEFAULT_COVER = "/assets/anime-ui/mono-panorama.webp";
 const MAX_ATTACHMENTS = 9;
+
+const QUICK_EMOJI = [
+  "😀", "😂", "🥹", "😊", "😍", "🥰", "😘", "😎",
+  "🤔", "🙄", "😮‍💨", "😭", "😤", "🫠", "🥱", "🤯",
+  "👍", "👏", "🙏", "💪", "🫶", "✌️", "👀", "🤝",
+  "❤️", "💔", "✨", "🔥", "🎉", "💯", "🌙", "☀️",
+  "🌧️", "🌸", "🍜", "☕", "🍺", "🎮", "🎧", "📚",
+] as const;
+
+function moodLabel(mood: string): string | null {
+  return MOOD_PRESETS.find((preset) => preset.emoji === mood)?.label ?? null;
+}
+
+function profileName(profile: LedgerProfile): string {
+  return profile.displayName ?? DEFAULT_NAME;
+}
 
 const SOURCE_LABELS: Record<SourceChannel, string> = {
   wechat: "微信",
@@ -86,6 +114,9 @@ export interface TimelineFeedProps {
   works: AnimeWork[];
   timeZone: string;
   composerSignal: number;
+  profile: LedgerProfile;
+  onSaveProfile: (profile: LedgerProfile) => Promise<boolean>;
+  onSetMood: (entryId: string, mood: string | null) => void;
   onCreatePost: (post: NewPost) => Promise<boolean>;
   onOpenStructuredCapture: (seed: CaptureDraftSeed) => void;
   onOpenCommand: () => void;
@@ -104,6 +135,7 @@ export function TimelineFeed(props: TimelineFeedProps) {
   const { entries, works, timeZone } = props;
   const [tab, setTab] = useState<FeedTabId>("all");
   const [composerOpen, setComposerOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [lightbox, setLightbox] = useState<{
     media: EntryMediaItem[];
     index: number;
@@ -138,8 +170,9 @@ export function TimelineFeed(props: TimelineFeedProps) {
     <div className="page feed-page">
       <div className="feed-layout">
         <main className="feed-column" aria-label="动态">
-          <FeedCover />
+          <FeedCover profile={props.profile} onEdit={() => setProfileOpen(true)} />
           <PostComposer
+            profile={props.profile}
             open={composerOpen}
             focusSignal={props.composerSignal}
             onClose={() => setComposerOpen(false)}
@@ -223,6 +256,20 @@ export function TimelineFeed(props: TimelineFeedProps) {
           onClose={() => setLightbox(null)}
         />
       ) : null}
+      {profileOpen ? (
+        <ProfileDialog
+          profile={props.profile}
+          onClose={() => setProfileOpen(false)}
+          onSave={async (next) => {
+            const saved = await props.onSaveProfile(next);
+            if (saved) {
+              setProfileOpen(false);
+            }
+            return saved;
+          }}
+          pushToast={props.pushToast}
+        />
+      ) : null}
     </div>
   );
 }
@@ -273,34 +320,64 @@ export function EntryAttachments({
   );
 }
 
-function Avatar({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+function Avatar({
+  profile,
+  size = "md",
+}: {
+  profile: LedgerProfile;
+  size?: "sm" | "md" | "lg";
+}) {
   return (
     <span className={`feed-avatar feed-avatar-${size}`} aria-hidden="true">
-      {OWNER_INITIAL}
+      {profile.avatarUrl ? (
+        <img src={profile.avatarUrl} alt="" decoding="async" />
+      ) : (
+        Array.from(profileName(profile))[0]
+      )}
     </span>
   );
 }
 
-function FeedCover() {
+function FeedCover({
+  profile,
+  onEdit,
+}: {
+  profile: LedgerProfile;
+  onEdit: () => void;
+}) {
   return (
     <header className="feed-cover">
       <div className="feed-cover-art">
         <img
-          src="/assets/anime-ui/mono-panorama.webp"
+          src={profile.coverUrl ?? DEFAULT_COVER}
           alt=""
           decoding="async"
           fetchPriority="high"
-          height="2218"
-          width="3082"
+          {...(profile.coverUrl ? {} : { height: "2218", width: "3082" })}
         />
+        <button type="button" className="feed-cover-edit" onClick={onEdit}>
+          <Camera aria-hidden="true" size={15} />
+          编辑资料
+        </button>
         <div className="feed-cover-identity">
-          <h1>{OWNER_NAME}</h1>
-          <span className="feed-cover-avatar" aria-hidden="true">
-            {OWNER_INITIAL}
-          </span>
+          <h1>{profileName(profile)}</h1>
+          <button
+            type="button"
+            className="feed-cover-avatar"
+            aria-label="更换头像"
+            onClick={onEdit}
+          >
+            {profile.avatarUrl ? (
+              <img src={profile.avatarUrl} alt="" decoding="async" />
+            ) : (
+              Array.from(profileName(profile))[0]
+            )}
+          </button>
         </div>
       </div>
-      <p className="feed-cover-signature">原文先于解释 · 默认仅自己可见</p>
+      <p className="feed-cover-signature">
+        {profile.signature ?? DEFAULT_SIGNATURE}
+      </p>
     </header>
   );
 }
@@ -341,6 +418,7 @@ interface Attachment {
 }
 
 interface PostComposerProps {
+  profile: LedgerProfile;
   open: boolean;
   focusSignal: number;
   onClose: () => void;
@@ -357,6 +435,7 @@ function extractHashtags(text: string): string[] {
 }
 
 function PostComposer({
+  profile,
   open,
   focusSignal,
   onClose,
@@ -366,6 +445,8 @@ function PostComposer({
 }: PostComposerProps) {
   const [text, setText] = useState("");
   const [type, setType] = useState<"thought" | "idea" | "mood">("thought");
+  const [mood, setMood] = useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -467,6 +548,8 @@ function PostComposer({
     setAttachments([]);
     setText("");
     setType("thought");
+    setMood(null);
+    setEmojiOpen(false);
   };
 
   const mediaIds = () =>
@@ -483,7 +566,7 @@ function PostComposer({
       type,
       bodyRaw: trimmed || mediaOnlyMarker(ready.map((item) => item.media!)),
       mediaIds: mediaIds(),
-      tags: extractHashtags(trimmed),
+      tags: withMoodTag(extractHashtags(trimmed), type === "mood" ? mood : null),
     });
     setSubmitting(false);
     if (saved) {
@@ -502,16 +585,22 @@ function PostComposer({
     setText("");
   };
 
-  const insertHashtag = () => {
+  const insertAtCursor = (snippet: string) => {
     const textarea = textareaRef.current;
     const start = textarea?.selectionStart ?? text.length;
     const end = textarea?.selectionEnd ?? text.length;
-    const next = `${text.slice(0, start)}#${text.slice(end)}`;
+    const next = `${text.slice(0, start)}${snippet}${text.slice(end)}`;
     setText(next);
     requestAnimationFrame(() => {
       textarea?.focus();
-      textarea?.setSelectionRange(start + 1, start + 1);
+      textarea?.setSelectionRange(start + snippet.length, start + snippet.length);
     });
+  };
+
+  const chooseMood = (next: string | null) => {
+    setMood(next);
+    setType(next ? "mood" : "thought");
+    setEmojiOpen(false);
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -547,7 +636,7 @@ function PostComposer({
           </button>
         </div>
         <div className="feed-composer-body">
-          <Avatar />
+          <Avatar profile={profile} />
           <div className="feed-composer-main">
             <label className="sr-only" htmlFor={textareaId}>
               动态内容
@@ -559,7 +648,9 @@ function PostComposer({
               value={text}
               placeholder={
                 type === "mood"
-                  ? "现在心情怎么样？"
+                  ? mood
+                    ? `${mood} 为什么是这个心情？`
+                    : "现在心情怎么样？"
                   : type === "idea"
                     ? "记下一个点子…"
                     : "今天想留下什么？"
@@ -645,23 +736,24 @@ function PostComposer({
               >
                 <Clapperboard aria-hidden="true" size={19} />
               </button>
-              <button
-                type="button"
-                className={type === "mood" ? "feed-tool is-active" : "feed-tool"}
-                aria-label="标记为心情"
-                aria-pressed={type === "mood"}
-                title="心情"
-                onClick={() => setType((current) => (current === "mood" ? "thought" : "mood"))}
-              >
-                <Smile aria-hidden="true" size={19} />
-              </button>
+              <EmojiPicker
+                open={emojiOpen}
+                mood={type === "mood" ? mood : null}
+                onToggle={() => setEmojiOpen((value) => !value)}
+                onClose={() => setEmojiOpen(false)}
+                onMood={chooseMood}
+                onEmoji={insertAtCursor}
+              />
               <button
                 type="button"
                 className={type === "idea" ? "feed-tool is-active" : "feed-tool"}
                 aria-label="标记为点子"
                 aria-pressed={type === "idea"}
                 title="点子"
-                onClick={() => setType((current) => (current === "idea" ? "thought" : "idea"))}
+                onClick={() => {
+                  setMood(null);
+                  setType((current) => (current === "idea" ? "thought" : "idea"));
+                }}
               >
                 <Lightbulb aria-hidden="true" size={19} />
               </button>
@@ -670,10 +762,22 @@ function PostComposer({
                 className="feed-tool"
                 aria-label="插入话题"
                 title="话题"
-                onClick={insertHashtag}
+                onClick={() => insertAtCursor("#")}
               >
                 <Hash aria-hidden="true" size={19} />
               </button>
+              {type === "mood" && mood ? (
+                <button
+                  type="button"
+                  className="feed-mood-pill"
+                  title="清除心情"
+                  onClick={() => chooseMood(null)}
+                >
+                  <span aria-hidden="true">{mood}</span>
+                  {moodLabel(mood) ?? "心情"}
+                  <X aria-hidden="true" size={12} />
+                </button>
+              ) : null}
               <span className="feed-toolbar-spacer" />
               <span className="feed-visibility-pill">
                 <LockKeyhole aria-hidden="true" size={13} />
@@ -706,6 +810,8 @@ function FeedPost({
   work,
   now,
   timeZone,
+  profile,
+  onSetMood,
   onOpenMedia,
   onOpenEntry,
   onOpenWork,
@@ -722,13 +828,15 @@ function FeedPost({
   const hideBody = isMediaOnlyBody(entry);
   const longBody = entry.bodyRaw.length > 280 || entry.bodyRaw.split("\n").length > 8;
   const isMediaLog = entry.type === "anime" || entry.type === "screen";
+  const mood = moodFromTags(entry.tags);
+  const name = profileName(profile);
 
   return (
-    <article className="feed-post" aria-label={`${OWNER_NAME}的动态`}>
-      <Avatar />
+    <article className="feed-post" aria-label={`${name}的动态`}>
+      <Avatar profile={profile} />
       <div className="feed-post-main">
         <header className="feed-post-header">
-          <strong>{OWNER_NAME}</strong>
+          <strong>{name}</strong>
           <button
             type="button"
             className="feed-post-time"
@@ -737,7 +845,9 @@ function FeedPost({
           >
             <time dateTime={entry.occurredAt}>{feedTime(entry, timeZone)}</time>
           </button>
-          {entry.type === "mood" ? <span className="feed-type-chip">心情</span> : null}
+          {entry.type === "mood" || mood ? (
+            <PostMood mood={mood} onChange={(next) => onSetMood(entry.id, next)} />
+          ) : null}
           {entry.type === "idea" ? <span className="feed-type-chip">点子</span> : null}
           <span className="feed-post-spacer" />
           <VisibilityMark visibility={entry.visibility} />
@@ -1278,5 +1388,419 @@ function MediaLightbox({
         </>
       ) : null}
     </div>
+  );
+}
+
+/** Closes a popover on outside pointer-down or Escape. */
+function useDismiss(
+  open: boolean,
+  rootRef: RefObject<HTMLElement | null>,
+  onClose: () => void,
+) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handlePointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open, onClose, rootRef]);
+}
+
+function MoodGrid({
+  mood,
+  onMood,
+}: {
+  mood: string | null;
+  onMood: (mood: string | null) => void;
+}) {
+  return (
+    <div className="feed-mood-grid" role="group" aria-label="此刻心情">
+      {MOOD_PRESETS.map((preset) => (
+        <button
+          key={preset.emoji}
+          type="button"
+          className={mood === preset.emoji ? "is-active" : ""}
+          aria-pressed={mood === preset.emoji}
+          onClick={() => onMood(mood === preset.emoji ? null : preset.emoji)}
+        >
+          <span aria-hidden="true">{preset.emoji}</span>
+          {preset.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EmojiPicker({
+  open,
+  mood,
+  onToggle,
+  onClose,
+  onMood,
+  onEmoji,
+}: {
+  open: boolean;
+  mood: string | null;
+  onToggle: () => void;
+  onClose: () => void;
+  onMood: (mood: string | null) => void;
+  onEmoji: (emoji: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+  useDismiss(open, rootRef, onClose);
+
+  return (
+    <div className="feed-emoji" ref={rootRef}>
+      <button
+        type="button"
+        className={open || mood ? "feed-tool is-active" : "feed-tool"}
+        aria-label="表情与心情"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        title="表情 / 心情"
+        onClick={onToggle}
+      >
+        {mood ? (
+          <span className="feed-tool-emoji" aria-hidden="true">
+            {mood}
+          </span>
+        ) : (
+          <Smile aria-hidden="true" size={19} />
+        )}
+      </button>
+      {open ? (
+        <div className="feed-emoji-panel" id={panelId} role="dialog" aria-label="表情与心情">
+          <p className="feed-emoji-heading">此刻心情 · 会标在这条动态上</p>
+          <MoodGrid mood={mood} onMood={onMood} />
+          <p className="feed-emoji-heading">插入表情</p>
+          <div className="feed-emoji-grid">
+            {QUICK_EMOJI.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                aria-label={`插入 ${emoji}`}
+                onClick={() => onEmoji(emoji)}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <p className="feed-emoji-hint">系统键盘里的任何表情也都能直接输入、保存。</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PostMood({
+  mood,
+  onChange,
+}: {
+  mood: string | null;
+  onChange: (mood: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, rootRef, close);
+  const label = mood ? moodLabel(mood) : null;
+
+  return (
+    <span className="feed-post-mood" ref={rootRef}>
+      <button
+        type="button"
+        className={mood ? "feed-mood-chip" : "feed-mood-chip is-empty"}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={mood ? "换一个心情" : "给这条心情选个表情"}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {mood ? (
+          <>
+            <span className="feed-mood-emoji" aria-hidden="true">
+              {mood}
+            </span>
+            {label ?? "心情"}
+          </>
+        ) : (
+          <>
+            <Smile aria-hidden="true" size={13} />
+            选个心情
+          </>
+        )}
+      </button>
+      {open ? (
+        <div className="feed-emoji-panel is-compact" role="dialog" aria-label="选择心情">
+          <MoodGrid
+            mood={mood}
+            onMood={(next) => {
+              setOpen(false);
+              if (next !== mood) {
+                onChange(next);
+              }
+            }}
+          />
+        </div>
+      ) : null}
+    </span>
+  );
+}
+
+interface ProfileImageState {
+  url: string | null;
+  uploading: boolean;
+  /** Media uploaded in this dialog session; discarded if it is not kept. */
+  freshId: string | null;
+}
+
+function ProfileDialog({
+  profile,
+  onClose,
+  onSave,
+  pushToast,
+}: {
+  profile: LedgerProfile;
+  onClose: () => void;
+  onSave: (profile: LedgerProfile) => Promise<boolean>;
+  pushToast: TimelineFeedProps["pushToast"];
+}) {
+  const [name, setName] = useState(profile.displayName ?? "");
+  const [signature, setSignature] = useState(profile.signature ?? "");
+  const [avatar, setAvatar] = useState<ProfileImageState>({
+    url: profile.avatarUrl,
+    uploading: false,
+    freshId: null,
+  });
+  const [cover, setCover] = useState<ProfileImageState>({
+    url: profile.coverUrl,
+    uploading: false,
+    freshId: null,
+  });
+  const [saving, setSaving] = useState(false);
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const coverInput = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const nameId = useId();
+  const signatureId = useId();
+  const titleId = useId();
+
+  const discardFresh = (state: ProfileImageState) => {
+    if (state.freshId) {
+      void discardEntryMedia(state.freshId).catch(() => undefined);
+    }
+  };
+
+  const cancel = () => {
+    discardFresh(avatar);
+    discardFresh(cover);
+    onClose();
+  };
+
+  useEffect(() => {
+    dialogRef.current?.querySelector("input")?.focus();
+  }, []);
+
+  const pick = async (
+    file: File | undefined,
+    current: ProfileImageState,
+    update: (state: ProfileImageState) => void,
+  ) => {
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/") && !/\.(heic|heif)$/i.test(file.name)) {
+      pushToast("info", "请选择图片", "头像和背景只支持照片。");
+      return;
+    }
+    update({ ...current, uploading: true });
+    try {
+      const prepared = await prepareMediaFile(file);
+      URL.revokeObjectURL(prepared.previewUrl);
+      const media = await uploadEntryMedia(
+        prepared.blob,
+        prepared.mimeType,
+        prepared.metadata,
+        () => undefined,
+      ).promise;
+      discardFresh(current);
+      update({ url: media.url, uploading: false, freshId: media.id });
+    } catch (error: unknown) {
+      update({ ...current, uploading: false });
+      pushToast(
+        "danger",
+        "图片没有上传",
+        error instanceof Error ? error.message : "请稍后再试。",
+      );
+    }
+  };
+
+  const busy = saving || avatar.uploading || cover.uploading;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy) {
+      return;
+    }
+    setSaving(true);
+    const saved = await onSave({
+      displayName: name.trim() || null,
+      signature: signature.trim() || null,
+      avatarUrl: avatar.url,
+      coverUrl: cover.url,
+    });
+    setSaving(false);
+    if (saved) {
+      // Uploads that were replaced or removed before saving are not kept.
+      for (const state of [avatar, cover]) {
+        if (state.url === null) {
+          discardFresh(state);
+        }
+      }
+    }
+  };
+
+  return createPortal(
+    <div className="feed-scope feed-dialog-backdrop" role="presentation" onMouseDown={cancel}>
+      <form
+        ref={dialogRef}
+        className="feed-profile-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            cancel();
+          }
+        }}
+        onSubmit={submit}
+      >
+        <header className="feed-profile-header">
+          <button type="button" className="feed-text-button" onClick={cancel}>
+            取消
+          </button>
+          <strong id={titleId}>编辑资料</strong>
+          <button type="submit" className="feed-primary-button is-small" disabled={busy}>
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </header>
+
+        <div className="feed-profile-cover">
+          <img src={cover.url ?? DEFAULT_COVER} alt="" />
+          <div className="feed-profile-cover-actions">
+            <button
+              type="button"
+              disabled={cover.uploading}
+              onClick={() => coverInput.current?.click()}
+            >
+              {cover.uploading ? (
+                <LoaderCircle className="feed-spin" aria-hidden="true" size={15} />
+              ) : (
+                <Camera aria-hidden="true" size={15} />
+              )}
+              {cover.uploading ? "上传中…" : "换背景"}
+            </button>
+            {cover.url ? (
+              <button type="button" onClick={() => setCover({ url: null, uploading: false, freshId: cover.freshId })}>
+                用默认背景
+              </button>
+            ) : null}
+          </div>
+          <div className="feed-profile-avatar">
+            <span className="feed-profile-avatar-image">
+              {avatar.url ? (
+                <img src={avatar.url} alt="" />
+              ) : (
+                Array.from(name.trim() || DEFAULT_NAME)[0]
+              )}
+            </span>
+            <button
+              type="button"
+              aria-label="换头像"
+              disabled={avatar.uploading}
+              onClick={() => avatarInput.current?.click()}
+            >
+              {avatar.uploading ? (
+                <LoaderCircle className="feed-spin" aria-hidden="true" size={16} />
+              ) : (
+                <Camera aria-hidden="true" size={16} />
+              )}
+            </button>
+          </div>
+        </div>
+        {avatar.url ? (
+          <button
+            type="button"
+            className="feed-text-button feed-profile-reset"
+            onClick={() => setAvatar({ url: null, uploading: false, freshId: avatar.freshId })}
+          >
+            移除头像，改用名字首字
+          </button>
+        ) : null}
+
+        <input
+          ref={avatarInput}
+          className="sr-only"
+          type="file"
+          accept="image/*,.heic,.heif"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(event) => {
+            void pick(event.target.files?.[0], avatar, setAvatar);
+            event.target.value = "";
+          }}
+        />
+        <input
+          ref={coverInput}
+          className="sr-only"
+          type="file"
+          accept="image/*,.heic,.heif"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(event) => {
+            void pick(event.target.files?.[0], cover, setCover);
+            event.target.value = "";
+          }}
+        />
+
+        <div className="feed-profile-fields">
+          <label htmlFor={nameId}>名字</label>
+          <input
+            id={nameId}
+            value={name}
+            maxLength={40}
+            placeholder={DEFAULT_NAME}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <label htmlFor={signatureId}>签名</label>
+          <input
+            id={signatureId}
+            value={signature}
+            maxLength={80}
+            placeholder={DEFAULT_SIGNATURE}
+            onChange={(event) => setSignature(event.target.value)}
+          />
+          <p>头像和背景和其他照片一样存在你自己的 R2 里，只有登录后能看到。</p>
+        </div>
+      </form>
+    </div>,
+    document.body,
   );
 }
