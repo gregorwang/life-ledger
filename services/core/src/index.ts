@@ -51,6 +51,13 @@ import {
   type UpdatePlaceInput,
   type AddShelfExcerptInput,
   type ArchiveSnapshot,
+  searchAllInputSchema,
+  type SearchAllInput,
+  type SearchHit,
+  type SearchKind,
+  type EntryLink,
+  type EntryLinkInput,
+  type EntryLinkKind,
   type YearReview,
   type CreateShelfItemInput,
   type LedgerProfile,
@@ -344,6 +351,23 @@ interface ShelfItemRow {
   deleted_at: string | null;
 }
 
+interface LinkRow {
+  entry_id: string;
+  target_kind: EntryLinkKind;
+  target_id: string;
+  title: string | null;
+  subtitle: string | null;
+  cover_url: string | null;
+  rating: number | null;
+  shelf_kind: ShelfItem["kind"] | null;
+}
+
+const LINK_TABLES: Record<EntryLinkKind, string> = {
+  shelf: "shelf_items",
+  place: "places",
+  game: "game_library_items",
+};
+
 interface PlaceRow {
   id: string;
   name: string;
@@ -600,6 +624,7 @@ function toSummary(row: EntryRow): EntrySummary {
     versionNo: row.version_no,
     media: [],
     followUps: [],
+    links: [],
   };
 }
 
@@ -1065,6 +1090,19 @@ async function collectIncrementalExport(
       ),
     },
   ];
+  tables.push({
+    name: "entry_links",
+    rows: await readPagedRows(
+      database,
+      `
+        SELECT *
+        FROM entry_links
+        WHERE user_id = ? AND created_at > ? AND created_at <= ?
+        ORDER BY created_at, entry_id
+      `,
+      [USER_ID, start, cutoff],
+    ),
+  });
   for (const name of ["game_library_items", "shelf_items", "places"] as const) {
     tables.push({
       name,
@@ -2468,6 +2506,8 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     }
 
     await this.#assertAttachableMedia(parsed.mediaIds);
+    const links = parsed.links ?? [];
+    await this.#assertLinkTargets(links);
     const entryType =
       parsed.mood && parsed.type === "note" ? "mood" : parsed.type;
     const tags = parsed.mood ? withMoodTag(parsed.tags, parsed.mood) : parsed.tags;
@@ -2534,6 +2574,12 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           createdAt,
         ),
         ...this.#attachMediaStatements(entryId, parsed.mediaIds, createdAt),
+        ...links.map((link) =>
+          this.env.DB.prepare(`
+            INSERT OR IGNORE INTO entry_links (entry_id, user_id, target_kind, target_id, created_at)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(entryId, USER_ID, link.kind, link.id, createdAt),
+        ),
       ]);
     } catch (error: unknown) {
       const concurrent = await this.#findIdempotent(
@@ -2547,6 +2593,201 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     }
 
     return this.#mutationResult(entryId, requestId, false);
+  }
+
+  async #assertLinkTargets(links: EntryLinkInput[]): Promise<void> {
+    for (const link of links) {
+      const table = LINK_TABLES[link.kind];
+      const row = await this.env.DB.prepare(`
+        SELECT 1 AS ok FROM ${table} WHERE id = ? AND user_id = ? AND status = 'active'
+      `)
+        .bind(link.id, USER_ID)
+        .first<{ ok: number }>();
+      if (!row) {
+        throw new LedgerDomainError(
+          "LINK_TARGET_NOT_FOUND",
+          `Linked ${link.kind} ${link.id} does not exist.`,
+          404,
+        );
+      }
+    }
+  }
+
+  /** One search box over every library; an empty query lists the latest. */
+  async searchAll(input: SearchAllInput): Promise<SearchHit[]> {
+    const parsed = searchAllInputSchema.parse(input);
+    const kinds: SearchKind[] = parsed.kinds.length
+      ? parsed.kinds
+      : ["entry", "book", "music", "place", "game", "anime", "screen"];
+    const like = `%${parsed.query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const statusLabels: Record<"book" | "music", Record<string, string>> = {
+      book: { in_progress: "在读", done: "读完", planned: "想读", dropped: "弃读" },
+      music: { in_progress: "在循环", done: "听过", planned: "想听", dropped: "不听了" },
+    };
+    const queries: Record<SearchKind, () => Promise<SearchHit[]>> = {
+      entry: async () => {
+        const rows = await this.env.DB.prepare(`
+          SELECT id, type, title, substr(body_raw, 1, 160) AS excerpt, occurred_at
+          FROM entries
+          WHERE user_id = ? AND status = 'active'
+            AND (body_raw LIKE ?2 ESCAPE '\\' OR coalesce(title, '') LIKE ?2 ESCAPE '\\' OR tags_json LIKE ?2 ESCAPE '\\')
+          ORDER BY occurred_at DESC LIMIT ?
+        `)
+          .bind(USER_ID, like, parsed.limit)
+          .all<{ id: string; type: string; title: string | null; excerpt: string; occurred_at: string }>();
+        return rows.results.map((row) => ({
+          kind: "entry",
+          id: row.id,
+          title: (row.title || row.excerpt).slice(0, 40),
+          subtitle: row.type,
+          date: row.occurred_at,
+          rating: null,
+          excerpt: row.excerpt,
+        }));
+      },
+      book: () => shelf("book"),
+      music: () => shelf("music"),
+      place: async () => {
+        const rows = await this.env.DB.prepare(`
+          SELECT ${PLACE_COLUMNS} FROM places
+          WHERE user_id = ? AND status = 'active'
+            AND (name LIKE ?2 ESCAPE '\\' OR coalesce(city, '') LIKE ?2 ESCAPE '\\'
+              OR coalesce(country, '') LIKE ?2 ESCAPE '\\' OR coalesce(trip, '') LIKE ?2 ESCAPE '\\'
+              OR note LIKE ?2 ESCAPE '\\')
+          ORDER BY visited_on DESC LIMIT ?
+        `)
+          .bind(USER_ID, like, parsed.limit)
+          .all<PlaceRow>();
+        return rows.results.map(toPlace).map((place) => ({
+          kind: "place",
+          id: place.id,
+          title: place.name,
+          subtitle: [place.city, place.country, place.trip].filter(Boolean).join(" · ") || null,
+          date: place.visitedOn,
+          rating: place.rating,
+          excerpt: place.note.slice(0, 160) || null,
+        }));
+      },
+      game: async () => {
+        const rows = await this.env.DB.prepare(`
+          SELECT id, title, platform, rating, review, progress FROM game_library_items
+          WHERE user_id = ? AND status = 'active'
+            AND (title LIKE ?2 ESCAPE '\\' OR tags_json LIKE ?2 ESCAPE '\\' OR review LIKE ?2 ESCAPE '\\')
+          ORDER BY rating DESC, title LIMIT ?
+        `)
+          .bind(USER_ID, like, parsed.limit)
+          .all<{ id: string; title: string; platform: string; rating: number; review: string; progress: number }>();
+        return rows.results.map((row) => ({
+          kind: "game",
+          id: row.id,
+          title: row.title,
+          subtitle: `${row.platform} · 完成度 ${row.progress}%`,
+          date: null,
+          rating: Number(row.rating),
+          excerpt: row.review.slice(0, 160) || null,
+        }));
+      },
+      anime: () => works("anime"),
+      screen: () => works("screen"),
+    };
+    const shelf = async (kind: "book" | "music"): Promise<SearchHit[]> => {
+      const rows = await this.env.DB.prepare(`
+        SELECT ${SHELF_COLUMNS} FROM shelf_items
+        WHERE user_id = ? AND status = 'active' AND kind = ?
+          AND (title LIKE ?3 ESCAPE '\\' OR coalesce(creator, '') LIKE ?3 ESCAPE '\\'
+            OR tags_json LIKE ?3 ESCAPE '\\' OR review LIKE ?3 ESCAPE '\\')
+        ORDER BY coalesce(finished_on, started_on, substr(created_at, 1, 10)) DESC LIMIT ?
+      `)
+        .bind(USER_ID, kind, like, parsed.limit)
+        .all<ShelfItemRow>();
+      return rows.results.map(toShelfItem).map((item) => ({
+        kind,
+        id: item.id,
+        title: item.title,
+        subtitle: [item.creator, statusLabels[kind][item.shelfStatus]].filter(Boolean).join(" · ") || null,
+        date: item.finishedOn ?? item.startedOn,
+        rating: item.rating,
+        excerpt: item.review.slice(0, 160) || null,
+      }));
+    };
+    const works = async (mediaType: "anime" | "screen"): Promise<SearchHit[]> => {
+      const rows = await this.env.DB.prepare(`
+        SELECT id, canonical_title, watch_status, overall_score_100, updated_at
+        FROM media_works
+        WHERE user_id = ? AND media_type = ?
+          AND (canonical_title LIKE ?3 ESCAPE '\\' OR aliases_json LIKE ?3 ESCAPE '\\')
+        ORDER BY updated_at DESC LIMIT ?
+      `)
+        .bind(USER_ID, mediaType, like, parsed.limit)
+        .all<{ id: string; canonical_title: string; watch_status: string | null; overall_score_100: number | null; updated_at: string }>();
+      return rows.results.map((row) => ({
+        kind: mediaType,
+        id: row.id,
+        title: row.canonical_title,
+        subtitle: row.watch_status,
+        date: row.updated_at,
+        rating: row.overall_score_100 === null ? null : row.overall_score_100 / 10,
+        excerpt: null,
+      }));
+    };
+    const results = await Promise.all(kinds.map((kind) => queries[kind]()));
+    return results.flat();
+  }
+
+  async listLinkedEntries(kind: EntryLinkKind, id: string): Promise<EntrySummary[]> {
+    const result = await this.env.DB.prepare(`
+      ${ENTRY_SELECT}
+      WHERE e.user_id = ? AND e.status = 'active'
+        AND e.id IN (
+          SELECT entry_id FROM entry_links
+          WHERE user_id = ? AND target_kind = ? AND target_id = ?
+        )
+      ORDER BY e.occurred_at DESC, e.id DESC
+      LIMIT 200
+    `)
+      .bind(USER_ID, USER_ID, kind, id)
+      .all<EntryRow>();
+    return this.#withEntryExtras(result.results.map(toSummary));
+  }
+
+  async getShelfItem(id: string): Promise<ShelfItem> {
+    return this.#requireShelfItem(id);
+  }
+
+  async getPlace(id: string): Promise<Place> {
+    return this.#requirePlace(id);
+  }
+
+  async getGameLibraryItem(id: string): Promise<GameLibraryItem> {
+    return this.#requireGameLibraryItem(id);
+  }
+
+  async deleteFollowUpById(followUpId: string): Promise<EntryDetail> {
+    const row = await this.env.DB.prepare(`
+      SELECT entry_id FROM entry_follow_ups WHERE id = ? AND user_id = ?
+    `)
+      .bind(followUpId, USER_ID)
+      .first<{ entry_id: string }>();
+    if (!row) {
+      throw new LedgerDomainError("FOLLOW_UP_NOT_FOUND", "Follow-up not found.", 404);
+    }
+    return this.deleteEntryFollowUp(row.entry_id, followUpId);
+  }
+
+  async removeEntryMediaById(mediaId: string): Promise<EntryDetail> {
+    const row = await this.env.DB.prepare(`
+      SELECT entry_id FROM entry_media WHERE id = ? AND user_id = ?
+    `)
+      .bind(mediaId, USER_ID)
+      .first<{ entry_id: string | null }>();
+    if (!row?.entry_id) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_NOT_FOUND",
+        "Media not found or not attached to an entry.",
+        404,
+      );
+    }
+    return this.deleteEntryMedia(row.entry_id, mediaId);
   }
 
   async logMedia(input: LogMediaInput): Promise<MutationResult> {
@@ -5139,8 +5380,8 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       return entries;
     }
     const ids = JSON.stringify(entries.map((entry) => entry.id));
-    const [mediaResult, followUpResult] = await this.env.DB.batch<
-      EntryMediaRow | EntryFollowUpRow
+    const [mediaResult, followUpResult, linkResult] = await this.env.DB.batch<
+      EntryMediaRow | EntryFollowUpRow | LinkRow
     >([
       this.env.DB.prepare(`
         SELECT ${ENTRY_MEDIA_COLUMNS}
@@ -5153,6 +5394,27 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         FROM entry_follow_ups
         WHERE user_id = ? AND entry_id IN (SELECT value FROM json_each(?))
         ORDER BY entry_id, created_at, id
+      `).bind(USER_ID, ids),
+      this.env.DB.prepare(`
+        SELECT l.entry_id, l.target_kind, l.target_id,
+          coalesce(s.title, p.name, g.title) AS title,
+          CASE l.target_kind
+            WHEN 'shelf' THEN s.creator
+            WHEN 'place' THEN nullif(trim(coalesce(p.city, '') || ' ' || coalesce(p.country, '')), '')
+            ELSE g.platform
+          END AS subtitle,
+          coalesce(s.cover_url, p.cover_url, g.cover_url) AS cover_url,
+          coalesce(s.rating, p.rating, g.rating) AS rating,
+          s.kind AS shelf_kind
+        FROM entry_links l
+        LEFT JOIN shelf_items s
+          ON l.target_kind = 'shelf' AND s.id = l.target_id AND s.status = 'active'
+        LEFT JOIN places p
+          ON l.target_kind = 'place' AND p.id = l.target_id AND p.status = 'active'
+        LEFT JOIN game_library_items g
+          ON l.target_kind = 'game' AND g.id = l.target_id AND g.status = 'active'
+        WHERE l.user_id = ? AND l.entry_id IN (SELECT value FROM json_each(?))
+        ORDER BY l.entry_id, l.created_at
       `).bind(USER_ID, ids),
     ]);
     const mediaByEntry = new Map<string, EntryMedia[]>();
@@ -5167,10 +5429,28 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       list.push(toEntryFollowUp(row));
       followUpsByEntry.set(row.entry_id, list);
     }
+    const linksByEntry = new Map<string, EntryLink[]>();
+    for (const row of (linkResult?.results ?? []) as LinkRow[]) {
+      if (row.title === null) {
+        continue; // Target was deleted; keep the post, drop the card.
+      }
+      const list = linksByEntry.get(row.entry_id) ?? [];
+      list.push({
+        kind: row.target_kind,
+        id: row.target_id,
+        title: row.title,
+        subtitle: row.subtitle,
+        coverUrl: row.cover_url,
+        rating: row.rating === null ? null : Number(row.rating),
+        shelfKind: row.shelf_kind,
+      });
+      linksByEntry.set(row.entry_id, list);
+    }
     return entries.map((entry) => ({
       ...entry,
       media: mediaByEntry.get(entry.id) ?? [],
       followUps: followUpsByEntry.get(entry.id) ?? [],
+      links: linksByEntry.get(entry.id) ?? [],
     }));
   }
 

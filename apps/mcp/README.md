@@ -31,36 +31,39 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 
 ## 工具面
 
-共 53 个工具，`tools/list` 的标题和说明均为中文：
+共 23 个工具（0.5.0 起从 53 个合并而来，名字和说明都是中文）。设计目标是让
+能力一般的模型也能选对：每个库一个 `save_*`（不传 id 新建、传 id 修改），
+一个全局搜索，一个按 id 查看，一个按 id 删除 / 恢复。`versionNo` 和幂等键都
+可以不传，由服务端补上。
 
-- 服务：`health`
-- 记录：`get_entry`、`search_entries`、`get_recent_entries`、
-  `capture_entry`、`update_entry`、`delete_entry`、`restore_entry`、
-  `purge_entry`
-- 媒体：`list_media_works`、`get_media_work`、`create_media_work`、
-  `update_media_work`、`upload_media_image`、`list_seasons`、
-  `create_season`、`update_season`、`log_media`
-- PlayStation 游戏库：`list_game_library`、`create_game_library_item`、
-  `update_game_library_item`、`delete_game_library_item`、
-  `restore_game_library_item`
-- 书架与音乐：`list_shelf_items`、`create_shelf_item`、`update_shelf_item`、
-  `add_shelf_excerpt`、`delete_shelf_item`、`restore_shelf_item`
-- 足迹：`list_places`、`create_place`、`update_place`、`delete_place`、
-  `restore_place`
-- 公开：`prepare_publish`、`confirm_action`、`unpublish_entry`
-- 动态照片/视频：`upload_entry_media`、`create_entry_media_upload`、
-  `attach_entry_media`、`remove_entry_media`
-- 补充：`add_entry_follow_up`、`delete_entry_follow_up`
-- 导入：`import_dry_run`、`import_commit`
-- 导出：`export_create`、`export_list`、`export_verify`
-- 设置：`settings_get`、`settings_update`
-- 回顾（只读）：`get_stats`、`list_tags`、`on_this_day`
+| 场景 | 工具 |
+| --- | --- |
+| 记一句话、想法、心情、照片 | `capture_entry`（`mood` 传表情，`aboutId` 关联书/歌/地点/游戏） |
+| 看番、看剧、看电影 | `log_media`（作品不存在自动创建） |
+| 书、专辑、单曲、歌单 | `save_shelf_item`（`addExcerpt` 追加摘抄/歌词） |
+| 去过的地方 | `save_place` |
+| 游戏 | `save_game` |
+| 作品封面、观看状态、总评分 | `save_media_work` |
+| 给动态补一句 / 改原文 | `add_follow_up` / `update_entry` |
+| 照片、视频 | `upload_photo`（≤ 10 MB，`purpose=post` 或 `cover`）/ `create_upload_url`（大文件）/ `attach_media` |
+| 找东西、查重 | `search_all`（动态、书、音乐、地点、游戏、番剧、影视一起搜） |
+| 按时间翻动态 | `search_entries` |
+| 看完整内容 | `get_item`（按 id 前缀自动判断；书/地点/游戏会带上相关动态） |
+| 回顾 | `get_stats`、`get_year_review`、`on_this_day`、`list_tags` |
+| 删除 / 恢复 | `delete_item`（必须 `confirm=true`）/ `restore_item` |
+| 公开 | `publish_entry`（第一次拿预览和确认码，用户同意后带上确认码再调一次）/ `unpublish_entry` |
+| 设置 | `settings`（不传参数就是读取，传哪个字段改哪个） |
 
-`search_entries` 与 `get_recent_entries` 支持 `occurredFrom`（含）/
-`occurredTo`（不含）时间范围和 `tag` 精确标签筛选，可直接回答“上个月做了什么”。
-`get_stats` 汇总 `[from, to)` 区间：总数、活跃天数、类型与可见性分布、
-按天（≤62 天）或按月的时间分布、高频标签、媒体作品与评分排行，
-日期按个人设置时区切分。
+`save_shelf_item`、`save_place`、`save_game` 都支持 `postToFeed`：同时在「日常」
+发一条仅自己可见的动态并关联到这个条目，网页上显示成带封面的卡片，条目详情里
+也能看到所有相关动态。重复调用同一段 `postToFeed` 不会重复发。
+
+`capture_entry` 不传 `idempotencyKey` 时，同一天完全相同的原文只会记一次。
+
+id 前缀：`ent_` 动态、`book_` 书、`music_` 音乐、`place_` 地点、`game_` 游戏、
+`work_` 番剧/影视、`followup_` 补充、`media_` 照片视频。
+
+永久删除、导入、导出和作品季度管理只在网页里做，不再暴露给 Agent。
 
 ## 资源与提示词
 
@@ -73,29 +76,9 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 - `life-ledger://on-this-day`：那年今日
 
 提示词（`prompts/list`）：`weekly_review` 与 `monthly_recap`（可选参数
-`month=YYYY-MM`），只引导调用只读工具生成私人回顾。
+`month=YYYY-MM`），只引导调用只读工具生成私人回顾，包括读了、听了、去了什么。
 
-危险操作有额外确认字段：
-
-- 移入回收站：`confirmMoveToTrash=true`
-- 永久删除：`confirmPermanentDelete=true`，且
-  `confirmationEntryId === entryId`
-- 提交导入：`confirmCommit=true`
-- 游戏库、书架、音乐与足迹的软删除与恢复：`confirm=true`，并提供当前 `versionNo`
-- 公开记录：必须先 `prepare_publish`，再提交短时确认码到
-  `confirm_action`
-- 移除动态里的照片/视频：`confirmRemove=true`（文件会从存储中删除）
-- 删除补充：`confirmDelete=true`
-
-## 书架与音乐
-
-`kind=book` 是书（`format`：paper / ebook / audiobook），`kind=music` 是音乐
-（`format`：album / track / playlist）。`shelfStatus` 共用四个值：`planned`
-想读/想听、`in_progress` 在读/在循环、`done` 读完/听过、`dropped` 弃了。
-`creator` 填作者或歌手，`rating` 0–10，日期用 `YYYY-MM-DD`，`excerpts` 是摘抄
-或歌词（`text` + 可选 `location`、`note`）。写入前先用 `list_shelf_items` 按
-名字查一下，避免重复；读完后用 `update_shelf_item` 改状态、补 `finishedOn`；
-只追加一句摘抄用 `add_shelf_excerpt`。
+服务端还带一段 `instructions`（选工具的速查表），支持的客户端会自动放进系统提示。
 
 ## 表情与心情
 
@@ -113,10 +96,10 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 网页「日常」里的每条动态最多 9 个照片/视频。Agent 先上传拿到
 `mediaId`，再把它放进 `capture_entry` / `log_media` 的 `mediaIds`：
 
-1. **小照片（解码后 ≤ 10 MB）**：`upload_entry_media`，传
-   `fileName`、`mimeType`、不带 `data:` 前缀的 `base64Data`，可选
-   `width`/`height`。直接返回 `{ id, url, ... }`，`id` 就是 `mediaId`。
-2. **视频或大文件（视频 ≤ 95 MB，照片 ≤ 20 MB）**：`create_entry_media_upload`
+1. **小照片（解码后 ≤ 10 MB）**：`upload_photo`，传 `mimeType`、不带
+   `data:` 前缀的 `base64Data`，可选 `fileName`、`width`/`height`。直接返回
+   `{ mediaId, url, kind }`。
+2. **视频或大文件（视频 ≤ 95 MB，照片 ≤ 20 MB）**：`create_upload_url`
    只传 `mimeType`（可选 `sizeBytes`、`width`、`height`、`durationMs`），
    返回 `mediaId`、30 分钟内有效且只能用一次的 `uploadUrl` 和 `curlExample`。
    用 PUT 上传原始字节，文件内容不经过对话上下文：
@@ -129,11 +112,11 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
    `Content-Type` 与申请时不一致是 415。
 3. **发动态**：`capture_entry` / `log_media` 加上
    `"mediaIds": ["media_…", "media_…"]`（按顺序展示）。若文字已经先发了，
-   用 `attach_entry_media` 把照片追加到那条记录上。
+   用 `attach_media` 把照片追加到那条记录上。
 
 支持 JPEG、PNG、WebP、GIF、MP4、MOV、WebM；服务端会核对文件头，内容与
 `mimeType` 不符会被拒绝。照片和视频都是私密的，只能在登录后的网页里看到，
-公开接口不会输出它们。`upload_media_image` 仍只用于作品封面这类公开图片。
+公开接口不会输出它们。作品封面这类公开图片用 `upload_photo` 的 `purpose=cover`。
 
 工具成功和失败都返回 JSON 文本。失败格式稳定为：
 

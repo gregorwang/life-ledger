@@ -69,6 +69,10 @@ const snapshot = {
       ],
     },
     {
+      name: "entry_links",
+      rows: [{ entry_id: "ent_1", target_kind: "shelf", target_id: "book_1" }],
+    },
+    {
       name: "places",
       rows: [
         {
@@ -109,6 +113,7 @@ describe("local archive", () => {
     expect(diary).toContain("![](../../media/entry-media/0f8fad5b-d9cb-469f-a165-70867728950e.jpg)");
     expect(diary).toContain("> 后来雨停了");
     expect(diary).toContain("#散步 · 仅自己可见 · 来自网页");
+    expect(diary).toContain("关于：《三体》");
     expect(diary).not.toContain("已经删掉的");
   });
 

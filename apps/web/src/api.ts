@@ -9,7 +9,9 @@ import type {
   GameLibraryItem,
   ImportDryRunReport,
   LedgerProfile,
+  EntryLinkKind,
   OnThisDayResult,
+  SearchHit,
   Place,
   ShelfItem,
   ShelfKind,
@@ -104,6 +106,7 @@ export function mapEntry(
       sourceChannel: followUp.sourceChannel,
       createdAt: followUp.createdAt,
     })),
+    links: entry.links ?? [],
     revisions:
       detail?.revisions.map((revision) => ({
         id: revision.id,
@@ -282,6 +285,26 @@ export async function loadGameLibrary(
   return response.items;
 }
 
+export async function loadLinkedEntries(
+  kind: EntryLinkKind,
+  id: string,
+  signal?: AbortSignal,
+): Promise<LedgerEntry[]> {
+  const result = await requestJson<{ items: Array<EntrySummary | EntryDetail> }>(
+    `/api/v1/links/${kind}/${encodeURIComponent(id)}/entries`,
+    signal ? { signal } : undefined,
+  );
+  return result.items.map(mapEntry);
+}
+
+export async function searchEverything(query: string, signal?: AbortSignal): Promise<SearchHit[]> {
+  const result = await requestJson<{ items: SearchHit[] }>(
+    `/api/v1/search?q=${encodeURIComponent(query)}`,
+    signal ? { signal } : undefined,
+  );
+  return result.items;
+}
+
 export async function loadYearReview(year: number, signal?: AbortSignal): Promise<YearReview> {
   return requestJson<YearReview>(`/api/v1/review/${year}`, signal ? { signal } : undefined);
 }
@@ -449,6 +472,7 @@ export async function createEntry(
             source,
             visibility: "private",
             mediaIds: draft.mediaIds,
+            ...(draft.links?.length ? { links: draft.links } : {}),
           }),
         });
   return mapEntry(result.entry);

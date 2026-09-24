@@ -38,6 +38,7 @@ import {
   uploadEntryMedia,
 } from "./api";
 import { prepareMediaFile } from "./media-prep";
+import { RelatedEntries } from "./RelatedEntries";
 import type { ToastMessage } from "./models";
 import type { NewPost } from "./TimelineFeed";
 import "./shelf.css";
@@ -180,11 +181,13 @@ export async function uploadCoverImage(file: File): Promise<string> {
 
 export interface ShelfPageProps {
   kind: ShelfKind;
+  focusId: string | null;
+  onOpenEntry: (entryId: string) => void;
   onCreatePost: (post: NewPost) => Promise<boolean>;
   pushToast: PushToast;
 }
 
-export function ShelfPage({ kind, onCreatePost, pushToast }: ShelfPageProps) {
+export function ShelfPage({ kind, focusId, onOpenEntry, onCreatePost, pushToast }: ShelfPageProps) {
   const copy = COPY[kind];
   const Icon = copy.icon;
   const [items, setItems] = useState<ShelfItem[]>([]);
@@ -211,6 +214,14 @@ export function ShelfPage({ kind, onCreatePost, pushToast }: ShelfPageProps) {
       });
     return () => controller.abort();
   }, [kind]);
+
+  const focusedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusId && focusedRef.current !== focusId && items.some((item) => item.id === focusId)) {
+      focusedRef.current = focusId;
+      setOpenId(focusId);
+    }
+  }, [focusId, items]);
 
   const counts = useMemo(() => {
     const result: Record<ShelfStatus | "all", number> = {
@@ -416,6 +427,7 @@ export function ShelfPage({ kind, onCreatePost, pushToast }: ShelfPageProps) {
           onEdit={() => setEditing(openItem)}
           onDelete={() => void remove(openItem)}
           onUpdated={replace}
+          onOpenEntry={onOpenEntry}
           pushToast={pushToast}
         />
       ) : null}
@@ -436,6 +448,7 @@ export function ShelfPage({ kind, onCreatePost, pushToast }: ShelfPageProps) {
                 bodyRaw: feedText(saved, copy),
                 mediaIds: [],
                 tags: [copy.feedTag],
+                links: [{ kind: "shelf", id: saved.id }],
               });
             }
           }}
@@ -499,6 +512,7 @@ function ShelfDetail({
   onEdit,
   onDelete,
   onUpdated,
+  onOpenEntry,
   pushToast,
 }: {
   item: ShelfItem;
@@ -507,6 +521,7 @@ function ShelfDetail({
   onEdit: () => void;
   onDelete: () => void;
   onUpdated: (item: ShelfItem) => void;
+  onOpenEntry: (entryId: string) => void;
   pushToast: PushToast;
 }) {
   const [excerpt, setExcerpt] = useState("");
@@ -651,6 +666,8 @@ function ShelfDetail({
           </div>
         </form>
       </section>
+
+      <RelatedEntries kind="shelf" id={item.id} onOpenEntry={onOpenEntry} />
 
       {item.tags.length ? (
         <div className="sh-tags">

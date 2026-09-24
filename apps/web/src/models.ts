@@ -1,3 +1,5 @@
+import type { EntryLink, EntryLinkInput } from "@life-ledger/contracts";
+
 export const ENTRY_TYPES = [
   "anime",
   "screen",
@@ -70,6 +72,7 @@ export interface LedgerEntry {
   versionNo: number;
   media: EntryMediaItem[];
   followUps: EntryFollowUp[];
+  links: EntryLink[];
   revisions: EntryRevision[];
   audit: AuditEvent[];
 }
@@ -156,6 +159,7 @@ export interface CaptureDraft {
   episodeLabel: string;
   mediaIds: string[];
   tags?: string[];
+  links?: EntryLinkInput[];
 }
 
 export interface CaptureDraftSeed {

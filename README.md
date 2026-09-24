@@ -9,7 +9,7 @@ Life Ledger 是一个默认私有、保留原文、可修订、可撤回、可�
 - 私人 / 待确认 / 公开状态机，以及发布预览 + 文本确认
 - 软删除、恢复为私人、永久清除文本确认
 - D1 schema migration、独立开发 seed、Core WorkerEntrypoint RPC
-- 无状态 Remote MCP Worker 与 53 个记录、动态照片/视频与补充、媒体、游戏库、书架与音乐、足迹、检索、统计回顾、修订、上传、发布和导出工具，外加上下文资源与周/月回顾提示词
+- 无状态 Remote MCP Worker：23 个面向小模型精简过的工具（记录、书架音乐、足迹、游戏、番剧影视、全局搜索、回顾、照片视频、删除恢复、公开），外加上下文资源与周/月回顾提示词
 - 公开 `/public/v1/anime` 与 `/public/v1/timeline` 白名单投影
 - 可直接移植到现有个人网站的 `@life-ledger/public-adapter`，远端异常或字段校验失败时回退静态数据
 - Cloudflare Workflow 定时/手动导出、私有 R2 归档，以及内容寻址的 R2 图片上传与公开只读加载

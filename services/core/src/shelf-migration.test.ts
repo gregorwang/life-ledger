@@ -53,4 +53,20 @@ describe("shelf_items schema", () => {
     expect(() => insert(database, { id: "x3", kind: "movie" })).toThrow();
     expect(() => insert(database, { id: "x4", kind: "book", rating: 11 })).toThrow();
   });
+
+  it("links posts to shelf items and drops links with the post", () => {
+    const database = openDatabase();
+    insert(database, { id: "book_1", kind: "book" });
+    database.exec(`
+      INSERT INTO entries (id, user_id, type, body_raw, body_plain, occurred_at, occurred_timezone, source_channel, created_at, updated_at)
+      VALUES ('ent_1', 'user_primary', 'thought', '读完了', '读完了', '2026-09-24T00:00:00Z', 'Asia/Tokyo', 'mcp', '2026-09-24T00:00:00Z', '2026-09-24T00:00:00Z');
+      INSERT INTO entry_links (entry_id, user_id, target_kind, target_id, created_at)
+      VALUES ('ent_1', 'user_primary', 'shelf', 'book_1', '2026-09-24T00:00:00Z');
+    `);
+    expect(() =>
+      database.exec(`INSERT INTO entry_links VALUES ('ent_1', 'user_primary', 'movie', 'x', 'now')`),
+    ).toThrow();
+    database.exec("DELETE FROM entries WHERE id = 'ent_1'");
+    expect(database.prepare("SELECT count(*) AS n FROM entry_links").get()).toEqual({ n: 0 });
+  });
 });

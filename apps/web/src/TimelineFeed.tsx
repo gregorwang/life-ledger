@@ -1,8 +1,12 @@
 import {
   ChevronLeft,
   ChevronRight,
+  BookOpen,
   Camera,
   CalendarClock,
+  Gamepad2,
+  MapPin,
+  Music2,
   Clapperboard,
   CornerDownRight,
   ExternalLink,
@@ -43,6 +47,8 @@ import {
   MOOD_PRESETS,
   moodFromTags,
   withMoodTag,
+  type EntryLink,
+  type EntryLinkInput,
   type LedgerProfile,
 } from "@life-ledger/contracts";
 
@@ -109,6 +115,8 @@ export interface NewPost {
   bodyRaw: string;
   mediaIds: string[];
   tags: string[];
+  /** Book, record, place or game the post is about. */
+  links?: EntryLinkInput[];
 }
 
 export interface TimelineFeedProps {
@@ -124,6 +132,7 @@ export interface TimelineFeedProps {
   onOpenCommand: () => void;
   onOpenEntry: (entryId: string) => void;
   onOpenWork: (workId: string) => void;
+  onOpenLink: (link: EntryLink) => void;
   onEdit: (entry: LedgerEntry) => void;
   onPublish: (entry: LedgerEntry) => void;
   onUnpublish: (entryId: string) => void;
@@ -818,6 +827,7 @@ function FeedPost({
   onOpenMedia,
   onOpenEntry,
   onOpenWork,
+  onOpenLink,
   onEdit,
   onPublish,
   onUnpublish,
@@ -880,6 +890,9 @@ function FeedPost({
         {isMediaLog ? (
           <WorkCard entry={entry} work={work} onOpenWork={onOpenWork} />
         ) : null}
+        {entry.links.map((link) => (
+          <LinkCard key={`${link.kind}:${link.id}`} link={link} onOpen={() => onOpenLink(link)} />
+        ))}
         {tags.length ? (
           <div className="feed-post-tags">
             {tags.map((tag) => (
@@ -1164,6 +1177,47 @@ function WorkCard({
     </button>
   ) : (
     <div className="feed-work-card">{content}</div>
+  );
+}
+
+const LINK_LABELS = {
+  book: { label: "书", icon: BookOpen },
+  music: { label: "音乐", icon: Music2 },
+  place: { label: "足迹", icon: MapPin },
+  game: { label: "游戏", icon: Gamepad2 },
+} as const;
+
+/** The book, record, place or game a post is about. */
+function LinkCard({ link, onOpen }: { link: EntryLink; onOpen: () => void }) {
+  const [failed, setFailed] = useState(false);
+  const flavor =
+    link.kind === "shelf" ? (link.shelfKind === "music" ? "music" : "book") : link.kind;
+  const { label, icon: Icon } = LINK_LABELS[flavor];
+  return (
+    <button type="button" className={`feed-link-card is-${flavor}`} onClick={onOpen}>
+      {link.coverUrl && !failed ? (
+        <img src={link.coverUrl} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />
+      ) : (
+        <span className="feed-link-placeholder" aria-hidden="true">
+          <Icon size={20} />
+        </span>
+      )}
+      <span className="feed-work-copy">
+        <small>
+          <Icon aria-hidden="true" size={12} />
+          {label}
+        </small>
+        <strong>{flavor === "book" ? `《${link.title}》` : link.title}</strong>
+        {link.subtitle ? <span>{link.subtitle}</span> : null}
+      </span>
+      {link.rating !== null ? (
+        <span className="feed-work-score">
+          <Star aria-hidden="true" size={14} />
+          <strong>{link.rating.toFixed(1)}</strong>
+          <small>/ 10</small>
+        </span>
+      ) : null}
+    </button>
   );
 }
 

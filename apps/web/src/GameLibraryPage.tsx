@@ -12,6 +12,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { loadGameLibrary } from "./api";
+import { RelatedEntries } from "./RelatedEntries";
 import "./game-library.css";
 
 type GameFilter = "all" | "completed" | "playing";
@@ -100,7 +101,13 @@ function GameCover({
   );
 }
 
-export function GameLibraryPage() {
+export function GameLibraryPage({
+  focusId,
+  onOpenEntry,
+}: {
+  focusId: string | null;
+  onOpenEntry: (entryId: string) => void;
+}) {
   const [items, setItems] = useState<GameLibraryItem[]>([]);
   const [filter, setFilter] = useState<GameFilter>("all");
   const [sort, setSort] = useState<GameSort>("rating");
@@ -125,6 +132,14 @@ export function GameLibraryPage() {
       });
     return () => controller.abort();
   }, []);
+
+  const focusedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusId && focusedRef.current !== focusId && items.some((game) => game.id === focusId)) {
+      focusedRef.current = focusId;
+      setOpenId(focusId);
+    }
+  }, [focusId, items]);
 
   const counts = useMemo(
     () =>
@@ -291,7 +306,9 @@ export function GameLibraryPage() {
         </ul>
       )}
 
-      {openGame ? <GameDetail game={openGame} onClose={() => setOpenId(null)} /> : null}
+      {openGame ? (
+        <GameDetail game={openGame} onClose={() => setOpenId(null)} onOpenEntry={onOpenEntry} />
+      ) : null}
     </div>
   );
 }
@@ -306,9 +323,11 @@ const TROPHY_TIERS = [
 function GameDetail({
   game,
   onClose,
+  onOpenEntry,
 }: {
   game: GameLibraryItem;
   onClose: () => void;
+  onOpenEntry: (entryId: string) => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -379,6 +398,7 @@ function GameDetail({
               </li>
             ))}
           </ul>
+          <RelatedEntries kind="game" id={game.id} onOpenEntry={onOpenEntry} />
           {game.tags.length ? (
             <div className="gl-tags">
               {game.tags.map((tag) => (

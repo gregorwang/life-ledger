@@ -17,6 +17,8 @@ import {
   profileSchema,
   createShelfItemInputSchema,
   createPlaceInputSchema,
+  entryLinkKindSchema,
+  searchAllInputSchema,
   listPlacesInputSchema,
   updatePlaceInputSchema,
   listShelfItemsInputSchema,
@@ -1256,6 +1258,21 @@ app.delete("/api/v1/places/:id", async (context) => {
   return context.json(
     await context.env.CORE.deletePlace(context.req.param("id"), bodyVersionNo(body)),
   );
+});
+
+app.get("/api/v1/search", async (context) => {
+  const input = searchAllInputSchema.parse({
+    query: context.req.query("q") ?? "",
+    limit: 6,
+  });
+  return context.json({ items: await context.env.CORE.searchAll(input) });
+});
+
+app.get("/api/v1/links/:kind/:id/entries", async (context) => {
+  const kind = entryLinkKindSchema.parse(context.req.param("kind"));
+  return context.json({
+    items: await context.env.CORE.listLinkedEntries(kind, context.req.param("id")),
+  });
 });
 
 app.get("/api/v1/review/:year", async (context) => {

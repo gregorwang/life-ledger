@@ -28,59 +28,21 @@ const failUnexpectedCall = async (): Promise<never> => {
 function createCore(
   overrides: Partial<McpCoreBinding> = {},
 ): McpCoreBinding {
+  const methods: Array<keyof McpCoreBinding> = [
+    "listEntries", "getEntry", "captureEntry", "updateEntry", "deleteEntry", "restoreEntry",
+    "listMediaWorks", "getMediaWork", "createMediaWork", "updateMediaWork", "uploadMediaImage",
+    "getGameLibraryItem", "createGameLibraryItem", "updateGameLibraryItem",
+    "deleteGameLibraryItem", "restoreGameLibraryItem",
+    "getShelfItem", "createShelfItem", "updateShelfItem", "addShelfExcerpt",
+    "deleteShelfItem", "restoreShelfItem",
+    "getPlace", "createPlace", "updatePlace", "deletePlace", "restorePlace",
+    "logMedia", "preparePublish", "confirmAction", "unpublishEntry",
+    "addEntryFollowUp", "deleteFollowUpById", "uploadEntryMedia", "createEntryMediaUpload",
+    "attachEntryMedia", "removeEntryMediaById", "searchAll", "listLinkedEntries",
+    "getYearReview", "getStats", "listTags", "getOnThisDay", "getSettings", "updateSettings",
+  ];
   return {
-    health: failUnexpectedCall,
-    listEntries: failUnexpectedCall,
-    getEntry: failUnexpectedCall,
-    captureEntry: failUnexpectedCall,
-    updateEntry: failUnexpectedCall,
-    deleteEntry: failUnexpectedCall,
-    restoreEntry: failUnexpectedCall,
-    purgeEntry: failUnexpectedCall,
-    listMediaWorks: failUnexpectedCall,
-    getMediaWork: failUnexpectedCall,
-    createMediaWork: failUnexpectedCall,
-    updateMediaWork: failUnexpectedCall,
-    uploadMediaImage: failUnexpectedCall,
-    listGameLibrary: failUnexpectedCall,
-    createGameLibraryItem: failUnexpectedCall,
-    updateGameLibraryItem: failUnexpectedCall,
-    deleteGameLibraryItem: failUnexpectedCall,
-    restoreGameLibraryItem: failUnexpectedCall,
-    listShelfItems: failUnexpectedCall,
-    createShelfItem: failUnexpectedCall,
-    updateShelfItem: failUnexpectedCall,
-    addShelfExcerpt: failUnexpectedCall,
-    deleteShelfItem: failUnexpectedCall,
-    restoreShelfItem: failUnexpectedCall,
-    listPlaces: failUnexpectedCall,
-    createPlace: failUnexpectedCall,
-    updatePlace: failUnexpectedCall,
-    deletePlace: failUnexpectedCall,
-    restorePlace: failUnexpectedCall,
-    listSeasons: failUnexpectedCall,
-    createSeason: failUnexpectedCall,
-    updateSeason: failUnexpectedCall,
-    logMedia: failUnexpectedCall,
-    preparePublish: failUnexpectedCall,
-    confirmAction: failUnexpectedCall,
-    unpublishEntry: failUnexpectedCall,
-    addEntryFollowUp: failUnexpectedCall,
-    deleteEntryFollowUp: failUnexpectedCall,
-    uploadEntryMedia: failUnexpectedCall,
-    createEntryMediaUpload: failUnexpectedCall,
-    attachEntryMedia: failUnexpectedCall,
-    deleteEntryMedia: failUnexpectedCall,
-    createImportDryRun: failUnexpectedCall,
-    commitImport: failUnexpectedCall,
-    createExport: failUnexpectedCall,
-    listExports: failUnexpectedCall,
-    verifyExport: failUnexpectedCall,
-    getStats: failUnexpectedCall,
-    listTags: failUnexpectedCall,
-    getOnThisDay: failUnexpectedCall,
-    getSettings: failUnexpectedCall,
-    updateSettings: failUnexpectedCall,
+    ...(Object.fromEntries(methods.map((name) => [name, failUnexpectedCall])) as unknown as McpCoreBinding),
     ...overrides,
   };
 }
@@ -122,59 +84,29 @@ function responseText(result: Awaited<ReturnType<Client["callTool"]>>): string {
 }
 
 const expectedToolNames = [
-  "health",
-  "get_entry",
-  "search_entries",
-  "get_recent_entries",
-  "get_stats",
-  "list_tags",
-  "on_this_day",
   "capture_entry",
-  "update_entry",
-  "delete_entry",
-  "restore_entry",
-  "purge_entry",
-  "list_media_works",
-  "get_media_work",
-  "list_game_library",
-  "create_game_library_item",
-  "update_game_library_item",
-  "delete_game_library_item",
-  "restore_game_library_item",
-  "list_shelf_items",
-  "create_shelf_item",
-  "update_shelf_item",
-  "add_shelf_excerpt",
-  "delete_shelf_item",
-  "restore_shelf_item",
-  "list_places",
-  "create_place",
-  "update_place",
-  "delete_place",
-  "restore_place",
-  "create_media_work",
-  "update_media_work",
-  "upload_media_image",
-  "list_seasons",
-  "create_season",
-  "update_season",
   "log_media",
-  "prepare_publish",
-  "confirm_action",
+  "save_shelf_item",
+  "save_place",
+  "save_game",
+  "save_media_work",
+  "add_follow_up",
+  "update_entry",
+  "upload_photo",
+  "create_upload_url",
+  "attach_media",
+  "search_all",
+  "search_entries",
+  "get_item",
+  "get_stats",
+  "get_year_review",
+  "on_this_day",
+  "list_tags",
+  "delete_item",
+  "restore_item",
+  "publish_entry",
   "unpublish_entry",
-  "upload_entry_media",
-  "create_entry_media_upload",
-  "attach_entry_media",
-  "remove_entry_media",
-  "add_entry_follow_up",
-  "delete_entry_follow_up",
-  "import_dry_run",
-  "import_commit",
-  "export_create",
-  "export_list",
-  "export_verify",
-  "settings_get",
-  "settings_update",
+  "settings",
 ];
 
 describe("Life Ledger MCP 工具契约", () => {
@@ -188,48 +120,17 @@ describe("Life Ledger MCP 工具契约", () => {
         expect(tool.description).toMatch(/[\u3400-\u9fff]/u);
       }
 
+      expect(response.tools.length).toBeLessThanOrEqual(25);
       const required = (name: string) =>
         response.tools.find((tool) => tool.name === name)?.inputSchema
-          .required;
-      expect(required("capture_entry")).toEqual(
-        expect.arrayContaining(["sourceChannel", "idempotencyKey"]),
+          .required ?? [];
+      // Small models only have to supply the text; keys and versions are optional.
+      expect(required("capture_entry")).toEqual(["rawText"]);
+      expect(required("save_shelf_item")).toEqual([]);
+      expect(required("delete_item")).toEqual(["id", "confirm"]);
+      expect(required("upload_photo")).toEqual(
+        expect.arrayContaining(["base64Data", "mimeType"]),
       );
-      expect(required("log_media")).toEqual(
-        expect.arrayContaining(["sourceChannel", "idempotencyKey"]),
-      );
-      expect(required("upload_media_image")).toEqual(
-        expect.arrayContaining([
-          "fileName",
-          "mimeType",
-          "base64Data",
-          "idempotencyKey",
-        ]),
-      );
-      const uploadSchema = response.tools.find(
-        (tool) => tool.name === "upload_media_image",
-      )?.inputSchema;
-      expect(uploadSchema?.additionalProperties).toBe(false);
-      expect(
-        (
-          uploadSchema?.properties?.mimeType as {
-            enum?: string[];
-          }
-        ).enum,
-      ).toEqual(["image/webp", "image/jpeg", "image/png"]);
-      expect(required("delete_entry")).toContain("confirmMoveToTrash");
-      expect(required("purge_entry")).toEqual(
-        expect.arrayContaining([
-          "confirmationEntryId",
-          "confirmPermanentDelete",
-        ]),
-      );
-      expect(required("import_commit")).toContain("confirmCommit");
-      expect(required("remove_entry_media")).toContain("confirmRemove");
-      expect(required("delete_entry_follow_up")).toContain("confirmDelete");
-      expect(required("upload_entry_media")).toEqual(
-        expect.arrayContaining(["fileName", "mimeType", "base64Data"]),
-      );
-      expect(required("create_entry_media_upload")).toContain("mimeType");
     });
   });
 
@@ -281,54 +182,122 @@ describe("Life Ledger MCP 工具契约", () => {
     });
   });
 
-  it("书架工具把书和摘抄交给 Core，并拒绝不属于该类型的格式", async () => {
-    const createShelfItem = vi.fn(async (input: unknown) => ({ id: "book_1", ...(input as object) }) as never);
-    const addShelfExcerpt = vi.fn(async () => ({ id: "book_1" }) as never);
-    await withClient(createCore({ createShelfItem, addShelfExcerpt }), async (client) => {
-      await client.callTool({
-        name: "create_shelf_item",
+  it("save_shelf_item 新建、追加摘抄并发一条关联动态", async () => {
+    const book = { id: "book_1", kind: "book", title: "三体", versionNo: 1 };
+    const createShelfItem = vi.fn(async () => book as never);
+    const addShelfExcerpt = vi.fn(async () => ({ ...book, versionNo: 2 }) as never);
+    const captureEntry = vi.fn(async () => ({ entryId: "ent_9" }) as never);
+    await withClient(createCore({ createShelfItem, addShelfExcerpt, captureEntry }), async (client) => {
+      const result = await client.callTool({
+        name: "save_shelf_item",
         arguments: {
           kind: "book",
           title: "三体",
           creator: "刘慈欣",
-          format: "paper",
+          status: "done",
           rating: 9.5,
-          finishedOn: "2026-09-01",
+          addExcerpt: { text: "弱小和无知不是生存的障碍，傲慢才是。", location: "p.120" },
+          postToFeed: "读完了三体，后劲很大。",
         },
       });
-      expect(createShelfItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: "book",
-          title: "三体",
-          shelfStatus: "done",
-          excerpts: [],
-        }),
-      );
+      expect(JSON.parse(responseText(result)).ok).toBe(true);
 
       const rejected = await client.callTool({
-        name: "create_shelf_item",
+        name: "save_shelf_item",
         arguments: { kind: "music", title: "晴天", format: "paper" },
       });
       expect("isError" in rejected && rejected.isError).toBe(true);
-      expect(createShelfItem).toHaveBeenCalledOnce();
-
-      await client.callTool({
-        name: "add_shelf_excerpt",
-        arguments: {
-          shelfItemId: "book_1",
-          versionNo: 2,
-          excerpt: { text: "弱小和无知不是生存的障碍，傲慢才是。", location: "p.120" },
-        },
-      });
-      expect(addShelfExcerpt).toHaveBeenCalledWith("book_1", {
-        versionNo: 2,
-        excerpt: {
-          text: "弱小和无知不是生存的障碍，傲慢才是。",
-          location: "p.120",
-          note: null,
-        },
-      });
+      const missing = await client.callTool({ name: "save_shelf_item", arguments: { title: "没说类型" } });
+      expect(JSON.parse(responseText(missing)).error.code).toBe("MISSING_FIELDS");
     });
+    expect(createShelfItem).toHaveBeenCalledOnce();
+    expect(createShelfItem).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "book", title: "三体", shelfStatus: "done", rating: 9.5 }),
+    );
+    expect(addShelfExcerpt).toHaveBeenCalledWith("book_1", {
+      versionNo: 1,
+      excerpt: { text: "弱小和无知不是生存的障碍，傲慢才是。", location: "p.120", note: null },
+    });
+    expect(captureEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawText: "读完了三体，后劲很大。",
+        links: [{ kind: "shelf", id: "book_1" }],
+        tags: ["读书"],
+      }),
+    );
+  });
+
+  it("修改时自动补上 versionNo，只发送传入的字段", async () => {
+    const getShelfItem = vi.fn(async () => ({ id: "music_1", kind: "music", versionNo: 7 }) as never);
+    const updateShelfItem = vi.fn(async () => ({ id: "music_1", kind: "music", versionNo: 8 }) as never);
+    const getPlace = vi.fn(async () => ({ id: "place_1", versionNo: 3 }) as never);
+    const updatePlace = vi.fn(async () => ({ id: "place_1", versionNo: 4 }) as never);
+    await withClient(createCore({ getShelfItem, updateShelfItem, getPlace, updatePlace }), async (client) => {
+      await client.callTool({ name: "save_shelf_item", arguments: { id: "music_1", rating: 9 } });
+      await client.callTool({ name: "save_place", arguments: { id: "place_1", note: "又去了一次" } });
+    });
+    expect(updateShelfItem).toHaveBeenCalledWith("music_1", { versionNo: 7, rating: 9 });
+    expect(updatePlace).toHaveBeenCalledWith("place_1", { versionNo: 3, note: "又去了一次" });
+  });
+
+  it("capture_entry 不传幂等键时自动去重，aboutId 变成关联", async () => {
+    const captureEntry = vi.fn(async (): Promise<never> => {
+      throw Object.assign(new Error("IDEMPOTENCY_CONFLICT: exists"), { code: "IDEMPOTENCY_CONFLICT" });
+    });
+    await withClient(createCore({ captureEntry }), async (client) => {
+      const result = await client.callTool({
+        name: "capture_entry",
+        arguments: { rawText: "今天去了奈良 🦌", aboutId: "place_1" },
+      });
+      expect(JSON.parse(responseText(result)).data.duplicate).toBe(true);
+      const bad = await client.callTool({
+        name: "capture_entry",
+        arguments: { rawText: "x", aboutId: "ent_1" },
+      });
+      expect(JSON.parse(responseText(bad)).error.code).toBe("INVALID_ABOUT_ID");
+    });
+    expect(captureEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        links: [{ kind: "place", id: "place_1" }],
+        source: expect.objectContaining({ channel: "mcp", messageId: expect.stringMatching(/^auto:/u) }),
+      }),
+    );
+  });
+
+  it("search_all、get_item、delete_item、restore_item 按 id 前缀分发", async () => {
+    const searchAll = vi.fn(async () => []);
+    const getShelfItem = vi.fn(async () => ({ id: "book_1", versionNo: 2 }) as never);
+    const listLinkedEntries = vi.fn(async () => []);
+    const deleteShelfItem = vi.fn(async () => ({}) as never);
+    const deleteEntry = vi.fn(async () => ({}) as never);
+    const deleteFollowUpById = vi.fn(async () => ({}) as never);
+    const restorePlace = vi.fn(async () => ({}) as never);
+    const getPlace = vi.fn(async () => ({ id: "place_1", versionNo: 5 }) as never);
+    await withClient(
+      createCore({ searchAll, getShelfItem, listLinkedEntries, deleteShelfItem, deleteEntry, deleteFollowUpById, restorePlace, getPlace }),
+      async (client) => {
+        await client.callTool({ name: "search_all", arguments: { query: "杭州", kinds: ["place"] } });
+        const item = await client.callTool({ name: "get_item", arguments: { id: "book_1" } });
+        expect(JSON.parse(responseText(item)).data).toEqual({
+          item: { id: "book_1", versionNo: 2 },
+          relatedEntries: [],
+        });
+        const refused = await client.callTool({ name: "delete_item", arguments: { id: "book_1" } });
+        expect("isError" in refused && refused.isError).toBe(true);
+        await client.callTool({ name: "delete_item", arguments: { id: "book_1", confirm: true } });
+        await client.callTool({ name: "delete_item", arguments: { id: "ent_1", confirm: true } });
+        await client.callTool({ name: "delete_item", arguments: { id: "followup_1", confirm: true } });
+        await client.callTool({ name: "restore_item", arguments: { id: "place_1" } });
+        const unknown = await client.callTool({ name: "get_item", arguments: { id: "xyz" } });
+        expect(JSON.parse(responseText(unknown)).error.code).toBe("UNKNOWN_ID");
+      },
+    );
+    expect(searchAll).toHaveBeenCalledWith({ query: "杭州", kinds: ["place"], limit: 10 });
+    expect(listLinkedEntries).toHaveBeenCalledWith("shelf", "book_1");
+    expect(deleteShelfItem).toHaveBeenCalledWith("book_1", 2);
+    expect(deleteEntry).toHaveBeenCalledWith("ent_1");
+    expect(deleteFollowUpById).toHaveBeenCalledWith("followup_1");
+    expect(restorePlace).toHaveBeenCalledWith("place_1", 5);
   });
 
   it("检索工具把时间范围与标签透传到 Core", async () => {
@@ -345,7 +314,7 @@ describe("Life Ledger MCP 工具契约", () => {
         },
       });
       await client.callTool({
-        name: "get_recent_entries",
+        name: "search_entries",
         arguments: { type: "mood", occurredFrom: "2026-09-17T00:00:00Z" },
       });
     });
@@ -531,104 +500,51 @@ describe("Life Ledger MCP 工具契约", () => {
     );
   });
 
-  it("正确路由媒体、季度、导入、导出与设置操作", async () => {
-    const listMediaWorks = vi.fn(async () => []);
-    const listGameLibrary = vi.fn(async () => []);
-    const createSeason = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("SEASON_STOP");
-      },
+  it("年度回顾返回精简结构，设置支持只改一个字段", async () => {
+    const getYearReview = vi.fn(async () => ({
+      year: 2026,
+      timezone: "Asia/Tokyo",
+      years: [2026],
+      entries: { total: 3, activeDays: 2, longestStreak: 2, byType: [], byMonth: [] },
+      moods: { counts: [{ key: "😌", count: 2 }], days: [{ date: "2026-01-01", mood: "😌" }] },
+      days: [{ date: "2026-01-01", count: 1 }],
+      topTags: [],
+      firstEntry: null,
+      works: [],
+      books: [{ id: "book_1", title: "三体", creator: "刘慈欣", rating: 9, finishedOn: "2026-09-01", excerpts: [{}] }],
+      music: [],
+      places: [],
+    }) as never);
+    const getSettings = vi.fn(async () => ({
+      timezone: "Asia/Tokyo",
+      captureMode: "safe",
+      publicPreview: true,
+      sensitiveWarning: true,
+      weeklyReview: false,
+      retentionDaily: 30,
+      retentionWeekly: 12,
+    }) as never);
+    const updateSettings = vi.fn(async (value: unknown) => value as never);
+    await withClient(createCore({ getYearReview, getSettings, updateSettings }), async (client) => {
+      const review = await client.callTool({ name: "get_year_review", arguments: { year: 2026 } });
+      const data = JSON.parse(responseText(review)).data;
+      expect(data.moods).toEqual([{ key: "😌", count: 2 }]);
+      expect(data).not.toHaveProperty("days");
+      expect(data.books).toEqual([
+        { id: "book_1", title: "三体", creator: "刘慈欣", rating: 9, finishedOn: "2026-09-01", excerpts: 1 },
+      ]);
+      await client.callTool({ name: "settings", arguments: {} });
+      await client.callTool({ name: "settings", arguments: { timezone: "Asia/Shanghai" } });
+    });
+    expect(getYearReview).toHaveBeenCalledWith(2026);
+    expect(updateSettings).toHaveBeenCalledOnce();
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ timezone: "Asia/Shanghai", retentionDaily: 30 }),
     );
-    const commitImport = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("IMPORT_STOP");
-      },
-    );
-    const verifyExport = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("VERIFY_STOP");
-      },
-    );
-    const getSettings = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("SETTINGS_STOP");
-      },
-    );
-
-    await withClient(
-      createCore({
-        listMediaWorks,
-        listGameLibrary,
-        createSeason,
-        commitImport,
-        verifyExport,
-        getSettings,
-      }),
-      async (client) => {
-        await client.callTool({
-          name: "list_media_works",
-          arguments: {
-            mediaType: "screen",
-            query: "攻壳",
-            watchStatus: "watching",
-            limit: 12,
-          },
-        });
-        await client.callTool({
-          name: "list_game_library",
-          arguments: {},
-        });
-        await client.callTool({
-          name: "create_season",
-          arguments: {
-            mediaWorkId: "work_001",
-            label: "SAC",
-            seasonNumber: 1,
-            title: "Stand Alone Complex",
-            watchStatus: "watching",
-          },
-        });
-        await client.callTool({
-          name: "import_commit",
-          arguments: {
-            batchId: "import_001",
-            confirmCommit: true,
-          },
-        });
-        await client.callTool({
-          name: "export_verify",
-          arguments: { exportId: "export_001" },
-        });
-        await client.callTool({
-          name: "settings_get",
-          arguments: {},
-        });
-      },
-    );
-
-    expect(listMediaWorks).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mediaType: "screen",
-        query: "攻壳",
-        watchStatus: "watching",
-        limit: 12,
-      }),
-    );
-    expect(listGameLibrary).toHaveBeenCalledOnce();
-    expect(createSeason).toHaveBeenCalledWith(
-      "work_001",
-      expect.objectContaining({
-        label: "SAC",
-        seasonNumber: 1,
-      }),
-    );
-    expect(commitImport).toHaveBeenCalledWith("import_001");
-    expect(verifyExport).toHaveBeenCalledWith("export_001");
-    expect(getSettings).toHaveBeenCalledOnce();
   });
 
   it("通过 MCP 上传照片/视频并把 mediaId 挂到动态上", async () => {
-    const uploadedMedia = {
+    const uploadEntryMedia = vi.fn(async () => ({
       id: "media_abc_0123abcd",
       kind: "image" as const,
       mimeType: "image/jpeg" as const,
@@ -638,8 +554,7 @@ describe("Life Ledger MCP 工具契约", () => {
       height: null,
       durationMs: null,
       createdAt: "2026-09-24T03:00:00.000Z",
-    };
-    const uploadEntryMedia = vi.fn(async () => uploadedMedia);
+    }));
     const createEntryMediaUpload = vi.fn(async () => ({
       mediaId: "media_def_4567cdef",
       uploadUrl: "https://ledger.example.test/upload/entry-media/token",
@@ -655,44 +570,27 @@ describe("Life Ledger MCP 工具契约", () => {
     const attachEntryMedia = vi.fn(async (): Promise<never> => {
       throw new Error("ATTACH_STOP");
     });
-    const deleteEntryMedia = vi.fn(async (): Promise<never> => {
+    const removeEntryMediaById = vi.fn(async (): Promise<never> => {
       throw new Error("REMOVE_STOP");
-    });
-    const deleteEntryFollowUp = vi.fn(async (): Promise<never> => {
-      throw new Error("FOLLOW_UP_STOP");
     });
 
     await withClient(
-      createCore({
-        uploadEntryMedia,
-        createEntryMediaUpload,
-        captureEntry,
-        attachEntryMedia,
-        deleteEntryMedia,
-        deleteEntryFollowUp,
-      }),
+      createCore({ uploadEntryMedia, createEntryMediaUpload, captureEntry, attachEntryMedia, removeEntryMediaById }),
       async (client) => {
         const upload = await client.callTool({
-          name: "upload_entry_media",
-          arguments: {
-            fileName: "IMG_0001.jpg",
-            mimeType: "image/jpeg",
-            base64Data: "/9j/4A==",
-          },
+          name: "upload_photo",
+          arguments: { fileName: "IMG_0001.jpg", mimeType: "image/jpeg", base64Data: "/9j/4A==" },
         });
-        expect(JSON.parse(responseText(upload))).toEqual({
-          ok: true,
-          data: uploadedMedia,
+        expect(JSON.parse(responseText(upload)).data).toEqual({
+          mediaId: "media_abc_0123abcd",
+          url: "/media/entry-media/0b8f6a2e-5c1d-4f7a-9e3b-2d6c8a1f4e70.jpg",
+          kind: "image",
         });
-
         const ticket = await client.callTool({
-          name: "create_entry_media_upload",
+          name: "create_upload_url",
           arguments: { mimeType: "video/mp4", sizeBytes: 30_000_000 },
         });
-        expect(JSON.parse(responseText(ticket)).data.uploadUrl).toContain(
-          "/upload/entry-media/",
-        );
-
+        expect(JSON.parse(responseText(ticket)).data.uploadUrl).toContain("/upload/entry-media/");
         await client.callTool({
           name: "capture_entry",
           arguments: {
@@ -703,29 +601,12 @@ describe("Life Ledger MCP 工具契约", () => {
           },
         });
         await client.callTool({
-          name: "attach_entry_media",
+          name: "attach_media",
           arguments: { entryId: "ent_1", mediaIds: ["media_abc_0123abcd"] },
         });
-        const refused = await client.callTool({
-          name: "remove_entry_media",
-          arguments: { entryId: "ent_1", mediaId: "media_abc_0123abcd" },
-        });
-        expect("isError" in refused && refused.isError).toBe(true);
         await client.callTool({
-          name: "remove_entry_media",
-          arguments: {
-            entryId: "ent_1",
-            mediaId: "media_abc_0123abcd",
-            confirmRemove: true,
-          },
-        });
-        await client.callTool({
-          name: "delete_entry_follow_up",
-          arguments: {
-            entryId: "ent_1",
-            followUpId: "followup_1",
-            confirmDelete: true,
-          },
+          name: "delete_item",
+          arguments: { id: "media_abc_0123abcd", confirm: true },
         });
       },
     );
@@ -739,107 +620,54 @@ describe("Life Ledger MCP 工具契约", () => {
     expect(captureEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         mediaIds: ["media_abc_0123abcd", "media_def_4567cdef"],
+        source: { channel: "wechat", messageId: "wx-media-001", conversationId: null },
       }),
     );
     expect(attachEntryMedia).toHaveBeenCalledWith("ent_1", ["media_abc_0123abcd"]);
-    expect(deleteEntryMedia).toHaveBeenCalledOnce();
-    expect(deleteEntryMedia).toHaveBeenCalledWith("ent_1", "media_abc_0123abcd");
-    expect(deleteEntryFollowUp).toHaveBeenCalledWith("ent_1", "followup_1");
+    expect(removeEntryMediaById).toHaveBeenCalledWith("media_abc_0123abcd");
   });
 
-  it("通过专用工具创建、更新、删除和恢复 PlayStation 游戏", async () => {
-    const createGameLibraryItem = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("CREATE_GAME_STOP");
-      },
-    );
-    const updateGameLibraryItem = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("UPDATE_GAME_STOP");
-      },
-    );
-    const deleteGameLibraryItem = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("DELETE_GAME_STOP");
-      },
-    );
-    const restoreGameLibraryItem = vi.fn(
-      async (): Promise<never> => {
-        throw new Error("RESTORE_GAME_STOP");
-      },
-    );
-
+  it("save_game 新建时补默认值，修改时自动补 versionNo", async () => {
+    const createGameLibraryItem = vi.fn(async () => ({ id: "game_1", versionNo: 1 }) as never);
+    const getGameLibraryItem = vi.fn(async () => ({ id: "game_ps_001", versionNo: 4 }) as never);
+    const updateGameLibraryItem = vi.fn(async () => ({ id: "game_ps_001", versionNo: 5 }) as never);
     await withClient(
-      createCore({
-        createGameLibraryItem,
-        updateGameLibraryItem,
-        deleteGameLibraryItem,
-        restoreGameLibraryItem,
-      }),
+      createCore({ createGameLibraryItem, getGameLibraryItem, updateGameLibraryItem }),
       async (client) => {
         await client.callTool({
-          name: "create_game_library_item",
-          arguments: {
-            platform: "PS5",
-            title: "测试游戏",
-            playTime: "12h",
-            progress: 30,
-            trophies: { platinum: 0, gold: 1, silver: 2, bronze: 3 },
-            achievementsCurrent: 6,
-            achievementsTotal: 20,
-            rating: 8.5,
-            review: "中文评价",
-            tags: ["RPG"],
-            coverUrl: "/cover.webp",
-            sourceUrl: "https://example.com/game",
-          },
+          name: "save_game",
+          arguments: { title: "测试游戏", platform: "PS5", rating: 8.5 },
         });
         await client.callTool({
-          name: "update_game_library_item",
-          arguments: {
-            gameLibraryItemId: "game_ps_001",
-            versionNo: 4,
-            playTime: "20h",
-            progress: 50,
-          },
-        });
-        await client.callTool({
-          name: "delete_game_library_item",
-          arguments: {
-            gameLibraryItemId: "game_ps_001",
-            versionNo: 5,
-            confirm: true,
-          },
-        });
-        await client.callTool({
-          name: "restore_game_library_item",
-          arguments: {
-            gameLibraryItemId: "game_ps_001",
-            versionNo: 6,
-            confirm: true,
-          },
+          name: "save_game",
+          arguments: { id: "game_ps_001", playTime: "20h", progress: 50 },
         });
       },
     );
-
     expect(createGameLibraryItem).toHaveBeenCalledWith(
-      expect.objectContaining({ platform: "PS5", title: "测试游戏" }),
+      expect.objectContaining({
+        platform: "PS5",
+        title: "测试游戏",
+        playTime: "0h",
+        progress: 0,
+        coverUrl: "",
+        trophies: { platinum: 0, gold: 0, silver: 0, bronze: 0 },
+      }),
     );
-    expect(updateGameLibraryItem).toHaveBeenCalledWith(
-      "game_ps_001",
-      expect.objectContaining({ versionNo: 4, playTime: "20h" }),
-    );
-    expect(deleteGameLibraryItem).toHaveBeenCalledWith("game_ps_001", 5);
-    expect(restoreGameLibraryItem).toHaveBeenCalledWith("game_ps_001", 6);
+    expect(updateGameLibraryItem).toHaveBeenCalledWith("game_ps_001", {
+      versionNo: 4,
+      playTime: "20h",
+      progress: 50,
+    });
   });
 
-  it("通过真实 MCP 客户端上传图片，并把公开 URL 传给作品更新工具", async () => {
+  it("封面上传返回公开 URL，再交给作品修改工具", async () => {
     const base64Data =
       "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==";
     const publicUrl =
-      `https://ledger.example.test/public-media/media-covers/work_001/${"a".repeat(64)}.webp`;
+      `https://ledger.example.test/public-media/other-images/unassigned/${"a".repeat(64)}.webp`;
     const uploadMediaImage = vi.fn(async () => ({
-      objectKey: `media-covers/work_001/${"a".repeat(64)}.webp`,
+      objectKey: `other-images/unassigned/${"a".repeat(64)}.webp`,
       publicUrl,
       mimeType: "image/webp" as const,
       sizeBytes: 46,
@@ -849,75 +677,35 @@ describe("Life Ledger MCP 工具契约", () => {
       etag: "etag-test",
       createdAt: "2026-07-26T00:00:00.000Z",
     }));
-    const updateMediaWork = vi.fn(async () => ({
-      id: "work_001",
-      mediaType: "anime" as const,
-      mediaKind: null,
-      title: "封面测试",
-      aliases: [],
-      coverUrl: publicUrl,
-      watchStatus: "planned" as const,
-      overallScore: null,
-      seasonCount: 0,
-      logCount: 0,
-      publicLogCount: 0,
-      lastLoggedAt: null,
-      createdAt: "2026-07-26T00:00:00.000Z",
-      updatedAt: "2026-07-26T00:00:00.000Z",
-      seasons: [],
-      logs: [],
-    }));
+    const updateMediaWork = vi.fn(async () => ({ id: "work_001", coverUrl: publicUrl }) as never);
 
-    await withClient(
-      createCore({ uploadMediaImage, updateMediaWork }),
-      async (client) => {
-        const uploadResult = await client.callTool({
-          name: "upload_media_image",
-          arguments: {
-            fileName: "cover.webp",
-            mimeType: "image/webp",
-            base64Data,
-            purpose: "media_cover",
-            mediaWorkId: "work_001",
-            idempotencyKey: "mcp-real-client-upload-001",
-          },
-        });
-        expect(JSON.parse(responseText(uploadResult))).toMatchObject({
-          ok: true,
-          data: {
-            publicUrl,
-            sizeBytes: 46,
-            width: 1,
-            height: 1,
-          },
-        });
-
-        const updateResult = await client.callTool({
-          name: "update_media_work",
-          arguments: {
-            mediaWorkId: "work_001",
-            coverUrl: publicUrl,
-          },
-        });
-        expect(JSON.parse(responseText(updateResult))).toMatchObject({
-          ok: true,
-          data: { id: "work_001", coverUrl: publicUrl },
-        });
-      },
-    );
-
-    expect(uploadMediaImage).toHaveBeenCalledWith({
-      fileName: "cover.webp",
-      mimeType: "image/webp",
-      base64Data,
-      purpose: "media_cover",
-      mediaWorkId: "work_001",
-      idempotencyKey: "mcp-real-client-upload-001",
+    await withClient(createCore({ uploadMediaImage, updateMediaWork }), async (client) => {
+      const uploadResult = await client.callTool({
+        name: "upload_photo",
+        arguments: { fileName: "cover.webp", mimeType: "image/webp", base64Data, purpose: "cover" },
+      });
+      expect(JSON.parse(responseText(uploadResult)).data).toEqual({ url: publicUrl, width: 1, height: 1 });
+      const gif = await client.callTool({
+        name: "upload_photo",
+        arguments: { mimeType: "image/gif", base64Data, purpose: "cover" },
+      });
+      expect(JSON.parse(responseText(gif)).error.code).toBe("UNSUPPORTED_COVER");
+      await client.callTool({
+        name: "save_media_work",
+        arguments: { id: "work_001", coverUrl: publicUrl },
+      });
     });
-    expect(updateMediaWork).toHaveBeenCalledWith(
-      "work_001",
-      { coverUrl: publicUrl },
+
+    expect(uploadMediaImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: "cover.webp",
+        mimeType: "image/webp",
+        base64Data,
+        purpose: "other",
+        idempotencyKey: expect.stringMatching(/^cover:[0-9a-f]{40}$/u),
+      }),
     );
+    expect(updateMediaWork).toHaveBeenCalledWith("work_001", { coverUrl: publicUrl });
   });
 });
 
@@ -1010,7 +798,7 @@ describe("Life Ledger MCP 双栈认证", () => {
           id: 1,
           method: "tools/call",
           params: {
-            name: "upload_media_image",
+            name: "upload_photo",
             arguments: {},
           },
         }),

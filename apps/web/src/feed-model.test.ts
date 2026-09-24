@@ -39,6 +39,7 @@ function entry(overrides: Partial<LedgerEntry>): LedgerEntry {
     versionNo: 1,
     media: [],
     followUps: [],
+    links: [],
     revisions: [],
     audit: [],
     ...overrides,

@@ -126,6 +126,7 @@ export const demoEntries: LedgerEntry[] = [
         createdAt: `${today}T12:05:00Z`,
       },
     ],
+    links: [],
     revisions: [
       {
         id: "rev-rezero-01",
@@ -170,6 +171,7 @@ export const demoEntries: LedgerEntry[] = [
     versionNo: 2,
     media: [],
     followUps: [],
+    links: [],
     revisions: [
       {
         id: "rev-idea-01",
@@ -232,6 +234,7 @@ export const demoEntries: LedgerEntry[] = [
       },
     ],
     followUps: [],
+    links: [],
     revisions: [
       {
         id: "rev-bocchi-01",
@@ -284,6 +287,7 @@ export const demoEntries: LedgerEntry[] = [
     versionNo: 1,
     media: [],
     followUps: [],
+    links: [],
     revisions: [
       {
         id: "rev-mood-01",
@@ -328,6 +332,7 @@ export const demoEntries: LedgerEntry[] = [
     versionNo: 1,
     media: [],
     followUps: [],
+    links: [],
     revisions: [
       {
         id: "rev-chiramune-01",
@@ -371,6 +376,7 @@ export const demoEntries: LedgerEntry[] = [
     versionNo: 1,
     media: [],
     followUps: [],
+    links: [],
     revisions: [
       {
         id: "rev-frieren-01",

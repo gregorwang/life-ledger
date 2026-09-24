@@ -13,6 +13,7 @@ import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "rea
 
 import { createPlace, deletePlace, loadPlaces, updatePlace } from "./api";
 import type { ToastMessage } from "./models";
+import { RelatedEntries } from "./RelatedEntries";
 import { ShelfDialog, splitTags, uploadCoverImage } from "./ShelfPage";
 import type { NewPost } from "./TimelineFeed";
 import "./shelf.css";
@@ -71,9 +72,13 @@ function groupPlaces(places: Place[]): Array<{ year: string; groups: TripGroup[]
 }
 
 export function PlacesPage({
+  focusId,
+  onOpenEntry,
   onCreatePost,
   pushToast,
 }: {
+  focusId: string | null;
+  onOpenEntry: (entryId: string) => void;
   onCreatePost: (post: NewPost) => Promise<boolean>;
   pushToast: PushToast;
 }) {
@@ -81,6 +86,18 @@ export function PlacesPage({
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Place | "new" | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const focusedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (focusId && focusedRef.current !== focusId && places.some((place) => place.id === focusId)) {
+      focusedRef.current = focusId;
+      setExpanded(focusId);
+      requestAnimationFrame(() =>
+        document.getElementById(`place-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }),
+      );
+    }
+  }, [focusId, places]);
   const searchId = useId();
 
   useEffect(() => {
@@ -227,7 +244,11 @@ export function PlacesPage({
                   ) : null}
                   <ul>
                     {group.places.map((place) => (
-                      <li key={place.id} className="pl-card">
+                      <li
+                        key={place.id}
+                        id={`place-${place.id}`}
+                        className={place.id === focusId ? "pl-card is-focused" : "pl-card"}
+                      >
                         {place.coverUrl ? (
                           <img className="pl-cover" src={place.coverUrl} alt="" loading="lazy" decoding="async" />
                         ) : (
@@ -255,6 +276,17 @@ export function PlacesPage({
                           {place.note ? <p className="pl-note">{place.note}</p> : null}
                           {place.tags.length ? (
                             <p className="pl-tags">{place.tags.map((tag) => `#${tag}`).join(" ")}</p>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="pl-related-toggle"
+                            aria-expanded={expanded === place.id}
+                            onClick={() => setExpanded((current) => (current === place.id ? null : place.id))}
+                          >
+                            {expanded === place.id ? "收起相关动态" : "相关动态"}
+                          </button>
+                          {expanded === place.id ? (
+                            <RelatedEntries kind="place" id={place.id} onOpenEntry={onOpenEntry} />
                           ) : null}
                         </div>
                         <div className="pl-actions">
@@ -291,6 +323,7 @@ export function PlacesPage({
                 bodyRaw: `去了${saved.name}${where ? `（${where}）` : ""}${saved.rating !== null ? ` ★${saved.rating.toFixed(1)}` : ""}${saved.note ? `\n${saved.note}` : ""}`,
                 mediaIds: [],
                 tags: ["足迹"],
+                links: [{ kind: "place", id: saved.id }],
               });
             }
           }}

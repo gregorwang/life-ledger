@@ -6,85 +6,82 @@ import {
   captureEntryInputSchema,
   createEntryMediaUploadInputSchema,
   createGameLibraryItemInputSchema,
-  createMediaSeasonInputSchema,
   createMediaWorkInputSchema,
-  importDryRunInputSchema,
+  createPlaceInputSchema,
+  createShelfItemInputSchema,
+  datePrecisionSchema,
+  entryMediaMimeTypeSchema,
   ledgerStatsInputSchema,
   listEntriesInputSchema,
-  listTagsInputSchema,
   listMediaWorksInputSchema,
+  listTagsInputSchema,
   logMediaInputSchema,
   mediaKindSchema,
   mediaTypeSchema,
   mediaWatchStatusSchema,
-  datePrecisionSchema,
   onThisDayInputSchema,
+  placeCategorySchema,
+  searchAllInputSchema,
+  searchKindSchema,
   settingsSchema,
-  uploadEntryMediaInputSchema,
-  uploadMediaImageInputSchema,
+  shelfExcerptSchema,
+  shelfFormatSchema,
+  shelfKindSchema,
+  shelfStatusSchema,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
-  addShelfExcerptInputSchema,
-  createPlaceInputSchema,
-  listPlacesInputSchema,
-  updatePlaceInputSchema,
-  createShelfItemInputSchema,
-  listShelfItemsInputSchema,
-  updateShelfItemInputSchema,
-  updateMediaSeasonInputSchema,
   updateMediaWorkInputSchema,
+  updatePlaceInputSchema,
+  updateShelfItemInputSchema,
+  uploadEntryMediaInputSchema,
+  uploadMediaImageInputSchema,
   type CoreBinding,
+  type EntryLinkInput,
+  type YearReview,
 } from "@life-ledger/contracts";
 
 export type McpCoreBinding = Pick<
   CoreBinding,
-  | "health"
   | "listEntries"
   | "getEntry"
   | "captureEntry"
   | "updateEntry"
   | "deleteEntry"
   | "restoreEntry"
-  | "purgeEntry"
   | "listMediaWorks"
   | "getMediaWork"
   | "createMediaWork"
   | "updateMediaWork"
   | "uploadMediaImage"
-  | "listGameLibrary"
+  | "getGameLibraryItem"
   | "createGameLibraryItem"
   | "updateGameLibraryItem"
   | "deleteGameLibraryItem"
   | "restoreGameLibraryItem"
-  | "listShelfItems"
+  | "getShelfItem"
   | "createShelfItem"
   | "updateShelfItem"
   | "addShelfExcerpt"
   | "deleteShelfItem"
   | "restoreShelfItem"
-  | "listPlaces"
+  | "getPlace"
   | "createPlace"
   | "updatePlace"
   | "deletePlace"
   | "restorePlace"
-  | "listSeasons"
-  | "createSeason"
-  | "updateSeason"
   | "logMedia"
   | "preparePublish"
   | "confirmAction"
   | "unpublishEntry"
   | "addEntryFollowUp"
-  | "deleteEntryFollowUp"
+  | "deleteFollowUpById"
   | "uploadEntryMedia"
   | "createEntryMediaUpload"
   | "attachEntryMedia"
-  | "deleteEntryMedia"
-  | "createImportDryRun"
-  | "commitImport"
-  | "createExport"
-  | "listExports"
-  | "verifyExport"
+  | "removeEntryMediaById"
+  | "searchAll"
+  | "listLinkedEntries"
+  | "getYearReview"
   | "getStats"
   | "listTags"
   | "getOnThisDay"
@@ -92,278 +89,314 @@ export type McpCoreBinding = Pick<
   | "updateSettings"
 >;
 
+/**
+ * The tool surface is deliberately small (23 tools) so modest models can pick
+ * the right one: one "save_*" upsert per library, one search, one get and one
+ * delete/restore that dispatch on the id prefix. versionNo and idempotency
+ * keys are optional and filled in here when the caller leaves them out.
+ */
+const SERVER_INSTRUCTIONS = `Life Ledger 是用户的私人人生账本，所有内容默认仅自己可见。
+怎么选工具：
+- 记一句话、想法、心情、照片 → capture_entry
+- 看了番剧/电影/电视剧 → log_media
+- 书或音乐（专辑/单曲/歌单）→ save_shelf_item
+- 去了某个地方 → save_place
+- 玩游戏 → save_game
+- 给已有动态补一句 → add_follow_up
+- 不知道东西在不在、id 是多少 → 先 search_all
+- 看某条的完整内容 → get_item
+id 前缀：ent_ 动态、book_ 书、music_ 音乐、place_ 地点、game_ 游戏、work_ 番剧/影视。
+新建时不要传 id；修改时传 id，versionNo 可以不传。
+用户原话要原样放进 rawText / review / note，不要改写或总结。`;
+
 const idSchema = z.string().trim().min(1).max(256);
 
-const mediaIdsToolSchema = z
+const localDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u, "日期格式 YYYY-MM-DD")
+  .describe("YYYY-MM-DD");
+
+const tagsField = z
+  .array(z.string().trim().min(1).max(80))
+  .max(30)
+  .describe("标签，不带 #，例如 [\"读书\", \"科幻\"]");
+
+const ratingField = z
+  .number()
+  .min(0)
+  .max(10)
+  .multipleOf(0.1)
+  .nullable()
+  .describe("评分 0–10，可以有一位小数");
+
+const postToFeedField = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50_000)
+  .optional()
+  .describe("可选：同时在「日常」发一条动态（用户原话），自动关联到这个条目");
+
+const versionField = z
+  .number()
+  .int()
+  .positive()
+  .optional()
+  .describe("可不传；传了就检查是否被别处改过");
+
+const mediaIdsField = z
   .array(idSchema)
   .max(ENTRY_MEDIA_LIMITS.maxPerEntry)
   .default([])
-  .describe(
-    "要附在这条记录上的照片/视频 mediaId（最多 9 个，按顺序展示）；先用 upload_entry_media 或 create_entry_media_upload 取得。",
-  );
+  .describe("要附上的照片/视频 mediaId（最多 9 个），先用 upload_photo 或 create_upload_url 取得");
+
+const sourceFields = {
+  sourceChannel: z.enum(["wechat", "mcp"]).default("mcp").describe("消息来自微信填 wechat，否则 mcp"),
+  idempotencyKey: idSchema
+    .optional()
+    .describe("可选：原始消息 id。传了之后重试不会重复记录"),
+  conversationId: idSchema.nullable().default(null),
+};
 
 const captureEntryToolSchema = z.object({
-  rawText: z.string().trim().min(1).max(50_000),
+  rawText: z.string().trim().min(1).max(50_000).describe("用户原话，原样保存，可以带 emoji"),
   type: z.enum(["thought", "idea", "mood", "note"]).default("note"),
-  title: z.string().trim().max(300).nullable().default(null),
-  occurredAt: z.iso.datetime({ offset: true }).optional(),
-  datePrecision: datePrecisionSchema.default("exact"),
-  timezone: z.string().trim().min(1).max(80).default("Asia/Tokyo"),
-  temporalUncertain: z.boolean().default(false),
-  tags: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
-  sourceChannel: z.enum(["wechat", "mcp"]),
-  idempotencyKey: z.string().trim().min(1).max(256),
-  conversationId: z.string().trim().min(1).max(256).nullable().default(null),
-  mediaIds: mediaIdsToolSchema,
   mood: z
     .string()
     .trim()
     .min(1)
     .max(16)
     .optional()
-    .describe(
-      "可选的心情表情，例如 😄 开心、😌 平静、😢 难过、😰 焦虑；传了就显示为这条动态的心情，type 省略时自动记为 mood。",
-    ),
+    .describe("心情表情，例如 😄 开心、😌 平静、😢 难过、😰 焦虑；传了就记为心情"),
+  tags: tagsField.default([]),
+  aboutId: idSchema
+    .optional()
+    .describe("可选：这条动态说的是哪本书/哪首歌/哪个地方/哪个游戏的 id，会显示成卡片"),
+  mediaIds: mediaIdsField,
+  occurredAt: z.iso
+    .datetime({ offset: true })
+    .optional()
+    .describe("发生时间，缺省为现在，例如 2026-09-24T20:00:00+09:00"),
+  datePrecision: datePrecisionSchema.default("exact"),
+  timezone: z.string().trim().min(1).max(80).default("Asia/Tokyo"),
+  title: z.string().trim().max(300).nullable().default(null),
+  ...sourceFields,
 });
 
 const logMediaToolSchema = z.object({
-  rawText: z.string().trim().min(1).max(50_000),
-  mediaType: mediaTypeSchema.default("anime"),
-  mediaKind: mediaKindSchema.nullable().default(null),
-  title: z.string().trim().min(1).max(300),
-  aliases: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
-  ratingScope: z.enum(["episode", "season", "work"]).nullable().default(null),
-  seasonId: idSchema.nullable().default(null),
-  seasonLabel: z.string().trim().min(1).max(80).nullable().default(null),
-  episodeLabel: z.string().trim().min(1).max(80).nullable().default(null),
+  title: z.string().trim().min(1).max(300).describe("作品名"),
+  rawText: z.string().trim().min(1).max(50_000).describe("用户原话"),
+  mediaType: mediaTypeSchema.default("anime").describe("anime 番剧 / screen 电影电视剧"),
+  mediaKind: mediaKindSchema.nullable().default(null).describe("screen 时填 movie 或 tv"),
+  score: ratingField.default(null),
+  ratingScope: z.enum(["episode", "season", "work"]).nullable().default(null).describe("评分针对单集/一季/整部"),
+  seasonLabel: z.string().trim().min(1).max(80).nullable().default(null).describe("例如 第3季"),
+  episodeLabel: z.string().trim().min(1).max(80).nullable().default(null).describe("例如 第4集"),
   progressState: mediaWatchStatusSchema.nullable().default(null),
-  score: z.number().min(0).max(10).multipleOf(0.1).nullable().default(null),
   comment: z.string().trim().max(50_000).nullable().default(null),
+  aliases: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
+  mediaIds: mediaIdsField,
   occurredAt: z.iso.datetime({ offset: true }).optional(),
   datePrecision: datePrecisionSchema.default("exact"),
   timezone: z.string().trim().min(1).max(80).default("Asia/Tokyo"),
-  sourceChannel: z.enum(["wechat", "mcp"]),
-  idempotencyKey: z.string().trim().min(1).max(256),
-  conversationId: z.string().trim().min(1).max(256).nullable().default(null),
-  mediaIds: mediaIdsToolSchema,
+  ...sourceFields,
 });
 
-const occurredRangeFields = {
-  occurredFrom: z.iso
-    .datetime({ offset: true })
+const saveShelfItemToolSchema = z.object({
+  id: idSchema.optional().describe("修改已有条目时填 book_… / music_…；新建时不填"),
+  versionNo: versionField,
+  kind: shelfKindSchema.optional().describe("新建时必填：book 书 / music 音乐"),
+  title: z.string().trim().min(1).max(300).optional().describe("书名、专辑名或歌名；新建时必填"),
+  creator: z.string().trim().min(1).max(300).nullable().optional().describe("作者或歌手"),
+  format: shelfFormatSchema
     .nullable()
-    .default(null)
-    .describe("发生时间下界（含），ISO 8601，例如 2026-09-01T00:00:00+09:00"),
-  occurredTo: z.iso
-    .datetime({ offset: true })
-    .nullable()
-    .default(null)
-    .describe("发生时间上界（不含），ISO 8601"),
-  tag: z
-    .string()
-    .trim()
-    .min(1)
-    .max(80)
-    .nullable()
-    .default(null)
-    .describe("只返回带有该标签的记录（不区分大小写的精确匹配）"),
-};
-
-const searchEntriesToolSchema = z.object({
-  query: z.string().trim().min(1).max(300),
-  type: z
-    .enum([
-      "thought",
-      "idea",
-      "mood",
-      "anime",
-      "screen",
-      "game",
-      "music",
-      "photo",
-      "note",
-    ])
-    .nullable()
-    .default(null),
-  visibility: z
-    .enum(["private", "publish_pending", "public"])
-    .nullable()
-    .default(null),
-  status: z.enum(["active", "deleted"]).default("active"),
-  mediaWorkId: idSchema.nullable().default(null),
-  scoreMin: z.number().min(0).max(10).nullable().default(null),
-  scoreMax: z.number().min(0).max(10).nullable().default(null),
-  ...occurredRangeFields,
-  limit: z.number().int().min(1).max(100).default(20),
-  cursor: z.string().trim().min(1).nullable().default(null),
+    .optional()
+    .describe("书：paper / ebook / audiobook；音乐：album / track / playlist"),
+  status: shelfStatusSchema
+    .optional()
+    .describe("planned 想读想听 / in_progress 在读在循环 / done 读完听过 / dropped 弃了；新建默认 done"),
+  rating: ratingField.optional(),
+  progress: z.number().int().min(0).max(100).nullable().optional().describe("书读到百分之几"),
+  review: z.string().trim().max(50_000).optional().describe("感受，用户原话"),
+  addExcerpt: shelfExcerptSchema
+    .optional()
+    .describe("追加一条摘抄或歌词：{ text, location?, note? }"),
+  tags: tagsField.optional(),
+  startedOn: localDate.nullable().optional(),
+  finishedOn: localDate.nullable().optional(),
+  coverUrl: z.string().trim().max(2_000).nullable().optional().describe("封面，用 upload_photo 返回的 url"),
+  sourceUrl: z.string().trim().max(2_000).nullable().optional(),
+  postToFeed: postToFeedField,
 });
 
-const recentEntriesToolSchema = z.object({
-  type: z
-    .enum([
-      "thought",
-      "idea",
-      "mood",
-      "anime",
-      "screen",
-      "game",
-      "music",
-      "photo",
-      "note",
-    ])
-    .nullable()
-    .default(null),
-  visibility: z
-    .enum(["private", "publish_pending", "public"])
-    .nullable()
-    .default(null),
-  status: z.enum(["active", "deleted"]).default("active"),
-  ...occurredRangeFields,
-  limit: z.number().int().min(1).max(100).default(20),
-  cursor: z.string().trim().min(1).nullable().default(null),
+const savePlaceToolSchema = z.object({
+  id: idSchema.optional().describe("修改已有地点时填 place_…；新建时不填"),
+  versionNo: versionField,
+  name: z.string().trim().min(1).max(200).optional().describe("地点名；新建时必填"),
+  visitedOn: localDate.optional().describe("到达日期；新建时缺省为今天"),
+  leftOn: localDate.nullable().optional(),
+  city: z.string().trim().min(1).max(100).nullable().optional(),
+  country: z.string().trim().min(1).max(100).nullable().optional(),
+  category: placeCategorySchema
+    .optional()
+    .describe("city 城市 / sight 景点 / food 吃喝 / stay 住宿 / nature 自然 / event 活动 / other"),
+  trip: z.string().trim().min(1).max(120).nullable().optional().describe("同一次旅行的名字，例如 2026 关西之旅"),
+  rating: ratingField.optional(),
+  note: z.string().trim().max(50_000).optional().describe("感受，用户原话"),
+  tags: tagsField.optional(),
+  coverUrl: z.string().trim().max(2_000).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional().describe("只有用户明确给出才填，不要猜"),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  postToFeed: postToFeedField,
 });
 
-const entryIdToolSchema = z.object({
-  entryId: idSchema,
+const saveGameToolSchema = z.object({
+  id: idSchema.optional().describe("修改已有游戏时填 game_…；新建时不填"),
+  versionNo: versionField,
+  title: z.string().trim().min(1).max(300).optional().describe("游戏名；新建时必填"),
+  platform: z.string().trim().min(1).max(80).optional().describe("例如 PlayStation / Switch / PC；新建时必填"),
+  rating: z.number().min(0).max(10).multipleOf(0.1).optional().describe("评分 0–10；新建时必填"),
+  playTime: z.string().trim().min(1).max(80).optional().describe("例如 35h"),
+  progress: z.number().int().min(0).max(100).optional().describe("完成度百分比"),
+  review: z.string().trim().max(50_000).optional(),
+  tags: tagsField.optional(),
+  achievementsCurrent: z.number().int().min(0).optional(),
+  achievementsTotal: z.number().int().min(0).optional(),
+  trophies: z
+    .object({
+      platinum: z.number().int().min(0),
+      gold: z.number().int().min(0),
+      silver: z.number().int().min(0),
+      bronze: z.number().int().min(0),
+    })
+    .optional(),
+  coverUrl: z.string().trim().max(2_000).optional(),
+  sourceUrl: z.string().trim().max(2_000).optional(),
+  postToFeed: postToFeedField,
+});
+
+const saveMediaWorkToolSchema = z.object({
+  id: idSchema.optional().describe("修改已有作品时填 work_…；新建时不填（一般直接用 log_media 就会自动建）"),
+  mediaType: mediaTypeSchema.optional().describe("新建时必填：anime / screen"),
+  mediaKind: mediaKindSchema.nullable().optional(),
+  title: z.string().trim().min(1).max(300).optional(),
+  aliases: z.array(z.string().trim().min(1).max(300)).max(30).optional(),
+  coverUrl: z.string().trim().min(1).max(2_000).nullable().optional(),
+  watchStatus: mediaWatchStatusSchema.nullable().optional(),
+  overallScore: ratingField.optional(),
 });
 
 const updateEntryToolSchema = z.object({
   entryId: idSchema,
-  versionNo: z.number().int().positive(),
-  bodyRaw: z.string().trim().min(1).max(50_000).optional(),
-  title: z.string().trim().max(300).nullable().optional(),
+  versionNo: versionField,
+  bodyRaw: z.string().trim().min(1).max(50_000).optional().describe("改正后的原文，会生成新修订"),
   occurredAt: z.iso.datetime({ offset: true }).optional(),
   datePrecision: datePrecisionSchema.optional(),
-  tags: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
-  score: z.number().min(0).max(10).multipleOf(0.1).nullable().optional(),
+  tags: tagsField.optional(),
+  score: ratingField.optional(),
   reason: z.string().trim().min(1).max(300).default("Hermes correction"),
 });
 
-const deleteEntryToolSchema = z.object({
-  entryId: idSchema,
-  confirmMoveToTrash: z.literal(true),
+const searchEntriesToolSchema = z.object({
+  query: z.string().trim().max(300).default("").describe("关键词；不填就按时间倒序列出"),
+  type: z
+    .enum(["thought", "idea", "mood", "anime", "screen", "note"])
+    .nullable()
+    .default(null),
+  tag: z.string().trim().min(1).max(80).nullable().default(null),
+  occurredFrom: z.iso.datetime({ offset: true }).nullable().default(null).describe("开始时间（含）"),
+  occurredTo: z.iso.datetime({ offset: true }).nullable().default(null).describe("结束时间（不含）"),
+  limit: z.number().int().min(1).max(100).default(20),
+  cursor: z.string().trim().min(1).nullable().default(null).describe("翻页用，填上次返回的 nextCursor"),
 });
 
-const purgeEntryToolSchema = z.object({
-  entryId: idSchema,
-  confirmationEntryId: idSchema,
-  confirmPermanentDelete: z.literal(true),
+const uploadPhotoToolSchema = z.object({
+  base64Data: z.string().min(4).describe("文件内容的 Base64，不带 data: 前缀；解码后不超过 10 MB"),
+  mimeType: entryMediaMimeTypeSchema,
+  fileName: z.string().trim().min(1).max(160).default("photo"),
+  purpose: z
+    .enum(["post", "cover"])
+    .default("post")
+    .describe("post：配在动态里（返回 mediaId）；cover：作品/书/地点的封面（返回 url，只支持 1 MB 以内的 jpg/png/webp）"),
+  width: z.number().int().positive().max(16_384).nullable().default(null),
+  height: z.number().int().positive().max(16_384).nullable().default(null),
 });
 
-const confirmActionToolSchema = z.object({
-  actionId: idSchema,
-  confirmationCode: z.string().trim().min(1).max(80),
-});
+function nowDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
-const mediaWorkIdToolSchema = z.object({
-  mediaWorkId: idSchema,
-});
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
-const gameLibraryItemIdSchema = z.object({
-  gameLibraryItemId: idSchema,
-});
+function domainError(code: string, message: string, status = 400): Error {
+  return Object.assign(new Error(`${code}: ${message}`), { code, status });
+}
 
-const createGameLibraryItemToolSchema = createGameLibraryItemInputSchema;
+/** Which library an id belongs to, from its prefix. */
+function kindOfId(id: string): "entry" | "shelf" | "place" | "game" | "work" | "followup" | "media" | null {
+  if (id.startsWith("ent_")) return "entry";
+  if (id.startsWith("book_") || id.startsWith("music_")) return "shelf";
+  if (id.startsWith("place_")) return "place";
+  if (id.startsWith("game_")) return "game";
+  if (id.startsWith("work_")) return "work";
+  if (id.startsWith("followup_")) return "followup";
+  if (id.startsWith("media_")) return "media";
+  return null;
+}
 
-const updateGameLibraryItemToolSchema = updateGameLibraryItemInputSchema.safeExtend({
-  gameLibraryItemId: idSchema,
-});
+function linkFor(id: string): EntryLinkInput {
+  const kind = kindOfId(id);
+  if (kind !== "shelf" && kind !== "place" && kind !== "game") {
+    throw domainError(
+      "INVALID_ABOUT_ID",
+      "aboutId 只能是书、音乐、地点或游戏的 id（book_ / music_ / place_ / game_ 开头）。",
+    );
+  }
+  return { kind, id };
+}
 
-const mutateGameLibraryItemToolSchema = gameLibraryItemIdSchema.extend({
-  versionNo: z.number().int().positive(),
-  confirm: z.literal(true),
-});
+/** Keeps only the keys the caller actually sent. */
+function defined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined),
+  ) as Partial<T>;
+}
 
-const shelfItemIdSchema = z.object({
-  shelfItemId: idSchema.describe("书架/音乐条目 id（book_… 或 music_…）"),
-});
+function isIdempotencyConflict(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("IDEMPOTENCY_CONFLICT");
+}
 
-const updateShelfItemToolSchema = updateShelfItemInputSchema.safeExtend(
-  shelfItemIdSchema.shape,
-);
-
-const addShelfExcerptToolSchema = addShelfExcerptInputSchema.safeExtend(
-  shelfItemIdSchema.shape,
-);
-
-const mutateShelfItemToolSchema = shelfItemIdSchema.extend({
-  versionNo: z.number().int().positive(),
-  confirm: z.literal(true),
-});
-
-const placeIdSchema = z.object({
-  placeId: idSchema.describe("足迹条目 id（place_…）"),
-});
-
-const updatePlaceToolSchema = updatePlaceInputSchema.safeExtend(placeIdSchema.shape);
-
-const mutatePlaceToolSchema = placeIdSchema.extend({
-  versionNo: z.number().int().positive(),
-  confirm: z.literal(true),
-});
-
-const updateMediaWorkToolSchema = z
-  .object({
-    mediaWorkId: idSchema,
-    mediaKind: mediaKindSchema.nullable().optional(),
-    title: z.string().trim().min(1).max(300).optional(),
-    aliases: z
-      .array(z.string().trim().min(1).max(300))
-      .max(30)
-      .optional(),
-    coverUrl: z.string().trim().min(1).max(2_000).nullable().optional(),
-    watchStatus: mediaWatchStatusSchema.nullable().optional(),
-    overallScore: z
-      .number()
-      .min(0)
-      .max(10)
-      .multipleOf(0.1)
-      .nullable()
-      .optional(),
-  })
-  .refine((value) => Object.keys(value).some((key) => key !== "mediaWorkId"), {
-    message: "至少提供一个要更新的媒体作品字段。",
-  });
-
-const seasonIdToolSchema = z.object({
-  seasonId: idSchema,
-});
-
-const createSeasonToolSchema = createMediaSeasonInputSchema.extend({
-  mediaWorkId: idSchema,
-});
-
-const updateSeasonToolSchema = z
-  .object({
-    seasonId: idSchema,
-    label: z.string().trim().min(1).max(120).optional(),
-    seasonNumber: z.number().int().positive().nullable().optional(),
-    title: z.string().trim().min(1).max(300).nullable().optional(),
-    score: z
-      .number()
-      .min(0)
-      .max(10)
-      .multipleOf(0.1)
-      .nullable()
-      .optional(),
-    watchStatus: mediaWatchStatusSchema.nullable().optional(),
-  })
-  .refine((value) => Object.keys(value).some((key) => key !== "seasonId"), {
-    message: "至少提供一个要更新的季度字段。",
-  });
-
-const importCommitToolSchema = z.object({
-  batchId: idSchema,
-  confirmCommit: z.literal(true),
-});
-
-const exportCreateToolSchema = z.object({
-  scope: z.enum(["incremental", "full"]).default("full"),
-});
-
-const exportIdToolSchema = z.object({
-  exportId: idSchema,
-});
+/** Short, model-friendly version of the web year review. */
+function compactYearReview(review: YearReview) {
+  return {
+    year: review.year,
+    entries: review.entries,
+    moods: review.moods.counts,
+    topTags: review.topTags,
+    firstEntry: review.firstEntry,
+    works: review.works.map(({ title, mediaType, score, logCount }) => ({ title, mediaType, score, logCount })),
+    books: review.books.map((book) => ({
+      id: book.id,
+      title: book.title,
+      creator: book.creator,
+      rating: book.rating,
+      finishedOn: book.finishedOn,
+      excerpts: book.excerpts.length,
+    })),
+    music: review.music.map((item) => ({ id: item.id, title: item.title, creator: item.creator, rating: item.rating })),
+    places: review.places.map((place) => ({
+      id: place.id,
+      name: place.name,
+      city: place.city,
+      country: place.country,
+      visitedOn: place.visitedOn,
+      trip: place.trip,
+    })),
+  };
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -447,41 +480,434 @@ const safeWriteAnnotations = {
 } as const;
 
 export function createServer(core: McpCoreBinding): McpServer {
-  const server = new McpServer({
-    name: "Life Ledger",
-    version: "0.4.0",
-  });
+  const server = new McpServer(
+    { name: "Life Ledger", version: "0.5.0" },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
+
+  /** Posts a private 日常 entry linked to a library item; retries are no-ops. */
+  const postLinked = async (text: string, link: EntryLinkInput, tag: string) => {
+    const key = `about:${link.kind}:${link.id}:${(await sha256Hex(text)).slice(0, 24)}`;
+    try {
+      return await core.captureEntry(
+        captureEntryInputSchema.parse({
+          rawText: text,
+          type: "thought",
+          occurredAt: nowIso(),
+          tags: [tag],
+          source: { channel: "mcp", messageId: key, conversationId: null },
+          visibility: "private",
+          mediaIds: [],
+          links: [link],
+        }),
+      );
+    } catch (error: unknown) {
+      if (isIdempotencyConflict(error)) {
+        return { alreadyPosted: true };
+      }
+      throw error;
+    }
+  };
+
+  // ---------------------------------------------------------------- 写入
 
   server.registerTool(
-    "health",
+    "capture_entry",
     {
-      title: "检查服务健康状态",
+      title: "记一条日常",
       description:
-        "检查 Life Ledger Core 与数据库是否可用，不读取或修改个人内容。",
-      inputSchema: z.object({}),
-      annotations: readOnlyAnnotations,
+        "记一句话、想法、心情或照片，出现在网页「日常」里，默认仅自己可见。心情用 mood 传一个表情；说的是某本书/歌/地点/游戏时，把它的 id 放进 aboutId。",
+      inputSchema: captureEntryToolSchema,
+      annotations: { ...safeWriteAnnotations, idempotentHint: true },
     },
-    () => toolResult(() => core.health()),
+    (input) =>
+      toolResult(async () => {
+        const occurredAt = input.occurredAt ?? nowIso();
+        const messageId =
+          input.idempotencyKey ??
+          `auto:${(await sha256Hex(`${input.rawText}|${input.occurredAt ?? nowDate()}`)).slice(0, 32)}`;
+        try {
+          return await core.captureEntry(
+            captureEntryInputSchema.parse({
+              rawText: input.rawText,
+              type: input.type,
+              title: input.title,
+              occurredAt,
+              datePrecision: input.datePrecision,
+              timezone: input.timezone,
+              tags: input.tags,
+              source: {
+                channel: input.sourceChannel,
+                messageId,
+                conversationId: input.conversationId,
+              },
+              visibility: "private",
+              mediaIds: input.mediaIds,
+              ...(input.mood ? { mood: input.mood } : {}),
+              ...(input.aboutId ? { links: [linkFor(input.aboutId)] } : {}),
+            }),
+          );
+        } catch (error: unknown) {
+          if (!input.idempotencyKey && isIdempotencyConflict(error)) {
+            return { duplicate: true, message: "今天已经记过一模一样的内容，没有重复写入。" };
+          }
+          throw error;
+        }
+      }),
   );
 
   server.registerTool(
-    "get_entry",
+    "log_media",
     {
-      title: "读取单条记录",
+      title: "记一次看番/看剧/看电影",
       description:
-        "按 entryId 读取一条完整记录，包括正文、照片/视频（media）、补充（followUps）、修订历史与审计信息；不存在时返回 null。",
-      inputSchema: entryIdToolSchema,
+        "记录看了什么番剧或电影电视剧，可带集数、季、评分和评论；作品不存在会自动创建。电影电视剧用 mediaType=screen。",
+      inputSchema: logMediaToolSchema,
+      annotations: { ...safeWriteAnnotations, idempotentHint: true },
+    },
+    (input) =>
+      toolResult(async () => {
+        const messageId =
+          input.idempotencyKey ??
+          `auto:${(await sha256Hex(`${input.title}|${input.rawText}|${input.occurredAt ?? nowDate()}`)).slice(0, 32)}`;
+        try {
+          return await core.logMedia(
+            logMediaInputSchema.parse({
+              rawText: input.rawText,
+              mediaType: input.mediaType,
+              mediaKind: input.mediaKind,
+              title: input.title,
+              aliases: input.aliases,
+              ratingScope: input.ratingScope,
+              seasonId: null,
+              seasonLabel: input.seasonLabel,
+              episodeLabel: input.episodeLabel,
+              progressState: input.progressState,
+              score: input.score,
+              comment: input.comment,
+              occurredAt: input.occurredAt ?? nowIso(),
+              datePrecision: input.datePrecision,
+              timezone: input.timezone,
+              source: {
+                channel: input.sourceChannel,
+                messageId,
+                conversationId: input.conversationId,
+              },
+              visibility: "private",
+              mediaIds: input.mediaIds,
+            }),
+          );
+        } catch (error: unknown) {
+          if (!input.idempotencyKey && isIdempotencyConflict(error)) {
+            return { duplicate: true, message: "今天已经记过一模一样的内容，没有重复写入。" };
+          }
+          throw error;
+        }
+      }),
+  );
+
+  server.registerTool(
+    "save_shelf_item",
+    {
+      title: "保存一本书或一张专辑/一首歌",
+      description:
+        "新建或修改书架（kind=book）和音乐（kind=music）。新建：不传 id，传 kind 和 title。修改：传 id，只传要改的字段。addExcerpt 追加一条摘抄或歌词；postToFeed 同时在「日常」发一条关联动态。先用 search_all 查一下，避免重复新建。",
+      inputSchema: saveShelfItemToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(async () => {
+        const fields = defined({
+          title: input.title,
+          creator: input.creator,
+          format: input.format,
+          shelfStatus: input.status,
+          rating: input.rating,
+          progress: input.progress,
+          review: input.review,
+          tags: input.tags,
+          startedOn: input.startedOn,
+          finishedOn: input.finishedOn,
+          coverUrl: input.coverUrl,
+          sourceUrl: input.sourceUrl,
+        });
+        let item;
+        if (input.id) {
+          item = await core.getShelfItem(input.id);
+          if (Object.keys(fields).length) {
+            item = await core.updateShelfItem(
+              input.id,
+              updateShelfItemInputSchema.parse({
+                versionNo: input.versionNo ?? item.versionNo,
+                ...fields,
+              }),
+            );
+          }
+        } else {
+          if (!input.kind || !input.title) {
+            throw domainError("MISSING_FIELDS", "新建时 kind（book / music）和 title 必填。");
+          }
+          item = await core.createShelfItem(
+            createShelfItemInputSchema.parse({ kind: input.kind, ...fields }),
+          );
+        }
+        if (input.addExcerpt) {
+          item = await core.addShelfExcerpt(item.id, {
+            versionNo: item.versionNo,
+            excerpt: input.addExcerpt,
+          });
+        }
+        const post = input.postToFeed
+          ? await postLinked(input.postToFeed, { kind: "shelf", id: item.id }, item.kind === "book" ? "读书" : "音乐")
+          : null;
+        return { item, post };
+      }),
+  );
+
+  server.registerTool(
+    "save_place",
+    {
+      title: "保存一个去过的地方",
+      description:
+        "新建或修改「足迹」。新建：不传 id，传 name（visitedOn 缺省今天）。修改：传 id，只传要改的字段。trip 填同一次旅行的名字用来分组；postToFeed 同时在「日常」发一条关联动态。",
+      inputSchema: savePlaceToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(async () => {
+        const fields = defined({
+          name: input.name,
+          visitedOn: input.visitedOn,
+          leftOn: input.leftOn,
+          city: input.city,
+          country: input.country,
+          category: input.category,
+          trip: input.trip,
+          rating: input.rating,
+          note: input.note,
+          tags: input.tags,
+          coverUrl: input.coverUrl,
+          latitude: input.latitude,
+          longitude: input.longitude,
+        });
+        let place;
+        if (input.id) {
+          place = await core.getPlace(input.id);
+          if (Object.keys(fields).length) {
+            place = await core.updatePlace(
+              input.id,
+              updatePlaceInputSchema.parse({
+                versionNo: input.versionNo ?? place.versionNo,
+                ...fields,
+              }),
+            );
+          }
+        } else {
+          if (!input.name) {
+            throw domainError("MISSING_FIELDS", "新建地点时 name 必填。");
+          }
+          place = await core.createPlace(
+            createPlaceInputSchema.parse({ visitedOn: nowDate(), ...fields }),
+          );
+        }
+        const post = input.postToFeed
+          ? await postLinked(input.postToFeed, { kind: "place", id: place.id }, "足迹")
+          : null;
+        return { item: place, post };
+      }),
+  );
+
+  server.registerTool(
+    "save_game",
+    {
+      title: "保存一个游戏",
+      description:
+        "新建或修改游戏库。新建：不传 id，传 title、platform、rating（其余可选）。修改：传 id，只传要改的字段。postToFeed 同时在「日常」发一条关联动态。",
+      inputSchema: saveGameToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(async () => {
+        const { id, versionNo, postToFeed, ...rest } = input;
+        const fields = defined(rest);
+        let game;
+        if (id) {
+          game = await core.getGameLibraryItem(id);
+          if (Object.keys(fields).length) {
+            game = await core.updateGameLibraryItem(
+              id,
+              updateGameLibraryItemInputSchema.parse({
+                versionNo: versionNo ?? game.versionNo,
+                ...fields,
+              }),
+            );
+          }
+        } else {
+          if (!input.title || !input.platform || input.rating === undefined) {
+            throw domainError("MISSING_FIELDS", "新建游戏时 title、platform、rating 必填。");
+          }
+          game = await core.createGameLibraryItem(createGameLibraryItemInputSchema.parse(fields));
+        }
+        const post = postToFeed
+          ? await postLinked(postToFeed, { kind: "game", id: game.id }, "游戏")
+          : null;
+        return { item: game, post };
+      }),
+  );
+
+  server.registerTool(
+    "save_media_work",
+    {
+      title: "修改番剧/影视作品信息",
+      description:
+        "修改作品的封面、观看状态、总评分、别名等；传 id 修改，不传 id 且给 mediaType + title 则新建。记录看了哪一集请用 log_media。",
+      inputSchema: saveMediaWorkToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ id, ...input }) =>
+      toolResult(async () => {
+        const fields = defined(input);
+        if (id) {
+          const { mediaType: _ignored, ...patch } = fields;
+          return core.updateMediaWork(id, updateMediaWorkInputSchema.parse(patch));
+        }
+        if (!input.mediaType || !input.title) {
+          throw domainError("MISSING_FIELDS", "新建作品时 mediaType 和 title 必填。");
+        }
+        return core.createMediaWork(createMediaWorkInputSchema.parse(fields));
+      }),
+  );
+
+  server.registerTool(
+    "add_follow_up",
+    {
+      title: "给动态补一句",
+      description: "给一条已有的日常动态追加补充（后来的想法），原文不变。entryId 以 ent_ 开头。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        body: z.string().trim().min(1).max(50_000).describe("补充内容，用户原话"),
+      }),
+      annotations: safeWriteAnnotations,
+    },
+    ({ entryId, body }) =>
+      toolResult(() => core.addEntryFollowUp(entryId, { body, sourceChannel: "mcp" })),
+  );
+
+  server.registerTool(
+    "update_entry",
+    {
+      title: "修改一条动态",
+      description:
+        "改正一条日常动态的原文、时间、标签或评分；会生成新的修订，旧版本仍保留。versionNo 可以不传。",
+      inputSchema: updateEntryToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ entryId, versionNo, ...input }) =>
+      toolResult(async () => {
+        const current = versionNo ?? (await core.getEntry(entryId))?.versionNo;
+        if (!current) {
+          throw domainError("ENTRY_NOT_FOUND", `找不到动态 ${entryId}。`, 404);
+        }
+        return core.updateEntry(
+          entryId,
+          updateEntryInputSchema.parse({ ...defined(input), versionNo: current }),
+        );
+      }),
+  );
+
+  server.registerTool(
+    "upload_photo",
+    {
+      title: "上传照片或短视频（Base64）",
+      description:
+        "上传一张照片或很短的视频。purpose=post：返回 mediaId，放进 capture_entry / log_media 的 mediaIds，或用 attach_media 挂到已有动态；purpose=cover：返回 url，用作书、地点、作品的封面。超过 10 MB 或较长的视频用 create_upload_url。",
+      inputSchema: uploadPhotoToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(async () => {
+        if (input.purpose === "cover") {
+          if (!["image/jpeg", "image/png", "image/webp"].includes(input.mimeType)) {
+            throw domainError("UNSUPPORTED_COVER", "封面只支持 jpg、png、webp。");
+          }
+          const result = await core.uploadMediaImage(
+            uploadMediaImageInputSchema.parse({
+              fileName: input.fileName,
+              mimeType: input.mimeType,
+              base64Data: input.base64Data,
+              purpose: "other",
+              idempotencyKey: `cover:${(await sha256Hex(input.base64Data)).slice(0, 40)}`,
+            }),
+          );
+          return { url: result.publicUrl, width: result.width, height: result.height };
+        }
+        const media = await core.uploadEntryMedia(
+          uploadEntryMediaInputSchema.parse({
+            fileName: input.fileName,
+            mimeType: input.mimeType,
+            base64Data: input.base64Data,
+            width: input.width,
+            height: input.height,
+          }),
+        );
+        return { mediaId: media.id, url: media.url, kind: media.kind };
+      }),
+  );
+
+  server.registerTool(
+    "create_upload_url",
+    {
+      title: "申请大文件/视频上传地址",
+      description:
+        "视频最大 95 MB、照片最大 20 MB。返回 mediaId 和 30 分钟内有效的一次性 uploadUrl：用 curl -X PUT -H 'Content-Type: <mimeType>' --data-binary @文件 '<uploadUrl>' 上传，成功后把 mediaId 放进 mediaIds 或 attach_media。",
+      inputSchema: createEntryMediaUploadInputSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(() => core.createEntryMediaUpload(createEntryMediaUploadInputSchema.parse(input))),
+  );
+
+  server.registerTool(
+    "attach_media",
+    {
+      title: "给已有动态加照片/视频",
+      description: "把已上传的 mediaId 追加到一条已有动态（比如先发了文字、后发照片）。每条最多 9 个。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        mediaIds: z.array(idSchema).min(1).max(ENTRY_MEDIA_LIMITS.maxPerEntry),
+      }),
+      annotations: safeWriteAnnotations,
+    },
+    ({ entryId, mediaIds }) => toolResult(() => core.attachEntryMedia(entryId, mediaIds)),
+  );
+
+  // ---------------------------------------------------------------- 读取
+
+  server.registerTool(
+    "search_all",
+    {
+      title: "全局搜索",
+      description:
+        "一次搜遍动态、书、音乐、地点、游戏、番剧和影视，返回 id、标题和简介。找东西、查重、回答「我有没有…」都先用它。query 留空 + kinds 指定类型，就是列出该类最近的条目。",
+      inputSchema: searchAllInputSchema.extend({
+        query: z.string().trim().max(200).default("").describe("关键词，例如 三体、杭州、周杰伦"),
+        kinds: z
+          .array(searchKindSchema)
+          .max(7)
+          .default([])
+          .describe("只搜这些类型：entry / book / music / place / game / anime / screen；不填搜全部"),
+      }),
       annotations: readOnlyAnnotations,
     },
-    ({ entryId }) => toolResult(() => core.getEntry(entryId)),
+    (input) => toolResult(() => core.searchAll(searchAllInputSchema.parse(input))),
   );
 
   server.registerTool(
     "search_entries",
     {
-      title: "搜索人生账本",
+      title: "按时间翻日常动态",
       description:
-        "按文本搜索记录，可筛选类型、可见性、状态、媒体作品、评分、发生时间范围、标签和游标；默认只搜有效记录。",
+        "列出或搜索「日常」动态，可按时间范围、类型、标签筛选，适合回答「上周/上个月做了什么」。不填 query 就按时间倒序。",
       inputSchema: searchEntriesToolSchema,
       annotations: readOnlyAnnotations,
     },
@@ -491,14 +917,10 @@ export function createServer(core: McpCoreBinding): McpServer {
           listEntriesInputSchema.parse({
             query: input.query,
             type: input.type,
-            visibility: input.visibility,
-            status: input.status,
-            mediaWorkId: input.mediaWorkId,
-            scoreMin: input.scoreMin,
-            scoreMax: input.scoreMax,
+            status: "active",
+            tag: input.tag,
             occurredFrom: input.occurredFrom,
             occurredTo: input.occurredTo,
-            tag: input.tag,
             limit: input.limit,
             cursor: input.cursor,
           }),
@@ -507,33 +929,31 @@ export function createServer(core: McpCoreBinding): McpServer {
   );
 
   server.registerTool(
-    "get_recent_entries",
+    "get_item",
     {
-      title: "读取最近记录",
+      title: "查看一条的完整内容",
       description:
-        "按时间倒序读取记录，可筛选类型、可见性、状态、发生时间范围和标签，并支持游标分页；适合回答“某段时间做了什么”。",
-      inputSchema: recentEntriesToolSchema,
+        "按 id 读取完整内容：动态（ent_，含补充、照片、修订）、书/音乐（book_ / music_，含摘抄和相关动态）、地点（place_）、游戏（game_）、番剧影视（work_，含观看记录）。",
+      inputSchema: z.object({ id: idSchema }),
       annotations: readOnlyAnnotations,
     },
-    (input) =>
-      toolResult(() =>
-        core.listEntries(
-          listEntriesInputSchema.parse({
-            query: "",
-            type: input.type,
-            visibility: input.visibility,
-            status: input.status,
-            mediaWorkId: null,
-            scoreMin: null,
-            scoreMax: null,
-            occurredFrom: input.occurredFrom,
-            occurredTo: input.occurredTo,
-            tag: input.tag,
-            limit: input.limit,
-            cursor: input.cursor,
-          }),
-        ),
-      ),
+    ({ id }) =>
+      toolResult(async () => {
+        switch (kindOfId(id)) {
+          case "entry":
+            return core.getEntry(id);
+          case "shelf":
+            return { item: await core.getShelfItem(id), relatedEntries: await core.listLinkedEntries("shelf", id) };
+          case "place":
+            return { item: await core.getPlace(id), relatedEntries: await core.listLinkedEntries("place", id) };
+          case "game":
+            return { item: await core.getGameLibraryItem(id), relatedEntries: await core.listLinkedEntries("game", id) };
+          case "work":
+            return core.getMediaWork(id);
+          default:
+            throw domainError("UNKNOWN_ID", `认不出 ${id} 是什么，先用 search_all 查 id。`);
+        }
+      }),
   );
 
   server.registerTool(
@@ -541,7 +961,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "统计一段时间",
       description:
-        "汇总 [from, to) 区间内的有效记录：总数、活跃天数、按类型/可见性分布、按天或按月的时间分布、高频标签、媒体作品与评分排行。适合周报、月报和“这段时间过得怎么样”。",
+        "汇总 [from, to) 区间的动态：总数、活跃天数、类型分布、按天或按月分布、常用标签、看过的作品和评分。适合周报、月报。",
       inputSchema: ledgerStatsInputSchema,
       annotations: readOnlyAnnotations,
     },
@@ -549,23 +969,27 @@ export function createServer(core: McpCoreBinding): McpServer {
   );
 
   server.registerTool(
-    "list_tags",
+    "get_year_review",
     {
-      title: "列出已用标签",
+      title: "年度回顾",
       description:
-        "按使用次数列出有效记录中已经用过的标签及最近使用时间。写入前先调用它，复用已有标签，避免同义标签分裂。",
-      inputSchema: listTagsInputSchema,
+        "某一年的总结：动态数、记录天数、最长连续、心情分布、常用话题、今年第一条、看过的作品、读完的书、听的音乐、去过的地方。回答「我今年过得怎么样」「今年读了几本书」时用。",
+      inputSchema: z.object({
+        year: z.number().int().min(1900).max(2200).optional().describe("缺省为今年"),
+      }),
       annotations: readOnlyAnnotations,
     },
-    (input) => toolResult(() => core.listTags(input)),
+    ({ year }) =>
+      toolResult(async () =>
+        compactYearReview(await core.getYearReview(year ?? new Date().getUTCFullYear())),
+      ),
   );
 
   server.registerTool(
     "on_this_day",
     {
       title: "那年今日",
-      description:
-        "列出往年同月同日（按个人时区）的有效记录；date 缺省为今天。只包含精确或近似日期的记录。",
+      description: "往年同月同日的动态；date 缺省为今天。",
       inputSchema: onThisDayInputSchema,
       annotations: readOnlyAnnotations,
     },
@@ -573,95 +997,28 @@ export function createServer(core: McpCoreBinding): McpServer {
   );
 
   server.registerTool(
-    "capture_entry",
+    "list_tags",
     {
-      title: "创建私密记录",
-      description:
-        "创建想法、心情或笔记，会出现在网页「日常」动态里。正文原样保存，支持 emoji；心情用 mood 字段传一个表情。新记录强制为私密；必须提供来源渠道与幂等键，重试不会重复写入。要附照片/视频时，先上传拿到 mediaId，再通过 mediaIds 传入。",
-      inputSchema: captureEntryToolSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        idempotentHint: true,
-      },
+      title: "列出已用标签",
+      description: "已经用过的标签和次数。写入前看一眼，复用已有标签，避免同义词分裂。",
+      inputSchema: listTagsInputSchema,
+      annotations: readOnlyAnnotations,
     },
-    (input) =>
-      toolResult(() =>
-        core.captureEntry(
-          captureEntryInputSchema.parse({
-            rawText: input.rawText,
-            type: input.type,
-            title: input.title,
-            occurredAt: input.occurredAt ?? nowIso(),
-            datePrecision: input.datePrecision,
-            timezone: input.timezone,
-            temporalUncertain: input.temporalUncertain,
-            tags: input.tags,
-            source: {
-              channel: input.sourceChannel,
-              messageId: input.idempotencyKey,
-              conversationId: input.conversationId,
-            },
-            visibility: "private",
-            mediaIds: input.mediaIds,
-            ...(input.mood ? { mood: input.mood } : {}),
-          }),
-        ),
-      ),
+    (input) => toolResult(() => core.listTags(input)),
   );
 
-  server.registerTool(
-    "update_entry",
-    {
-      title: "更新记录",
-      description:
-        "用当前 versionNo 乐观锁更新记录正文、标题、时间、标签或评分；成功后保留修订历史。",
-      inputSchema: updateEntryToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ entryId, ...input }) =>
-      toolResult(() =>
-        core.updateEntry(entryId, updateEntryInputSchema.parse(input)),
-      ),
-  );
+  // ---------------------------------------------------------------- 管理
 
   server.registerTool(
-    "delete_entry",
+    "delete_item",
     {
-      title: "移入回收站",
+      title: "删除（移入回收站）",
       description:
-        "软删除一条记录，必要时先取消公开；可恢复。必须显式传入 confirmMoveToTrash=true。",
-      inputSchema: deleteEntryToolSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    ({ entryId }) => toolResult(() => core.deleteEntry(entryId)),
-  );
-
-  server.registerTool(
-    "restore_entry",
-    {
-      title: "恢复回收站记录",
-      description: "把软删除记录恢复为私密有效状态，不会自动重新公开。",
-      inputSchema: entryIdToolSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        idempotentHint: true,
-      },
-    },
-    ({ entryId }) => toolResult(() => core.restoreEntry(entryId)),
-  );
-
-  server.registerTool(
-    "purge_entry",
-    {
-      title: "永久删除记录",
-      description:
-        "不可恢复地永久删除回收站记录。必须传 confirmPermanentDelete=true，且 confirmationEntryId 与 entryId 完全一致。",
-      inputSchema: purgeEntryToolSchema,
+        "按 id 删除：动态、书、音乐、地点、游戏会进回收站，可用 restore_item 恢复；补充（followup_）和照片视频（media_）会直接删除。必须传 confirm=true，只在用户明确要求删除时调用。",
+      inputSchema: z.object({
+        id: idSchema,
+        confirm: z.literal(true).describe("用户明确要求删除时才传 true"),
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -669,666 +1026,100 @@ export function createServer(core: McpCoreBinding): McpServer {
         openWorldHint: false,
       },
     },
-    ({ entryId, confirmationEntryId }) =>
+    ({ id }) =>
       toolResult(async () => {
-        if (entryId !== confirmationEntryId) {
-          throw Object.assign(
-            new Error("PURGE_CONFIRMATION_MISMATCH: 确认记录 ID 不一致。"),
-            { code: "PURGE_CONFIRMATION_MISMATCH", status: 409 },
-          );
+        switch (kindOfId(id)) {
+          case "entry":
+            return core.deleteEntry(id);
+          case "shelf":
+            return core.deleteShelfItem(id, (await core.getShelfItem(id)).versionNo);
+          case "place":
+            return core.deletePlace(id, (await core.getPlace(id)).versionNo);
+          case "game":
+            return core.deleteGameLibraryItem(id, (await core.getGameLibraryItem(id)).versionNo);
+          case "followup":
+            return core.deleteFollowUpById(id);
+          case "media":
+            return core.removeEntryMediaById(id);
+          default:
+            throw domainError("UNKNOWN_ID", `不能删除 ${id}：只支持动态、书、音乐、地点、游戏、补充和照片。`);
         }
-        return core.purgeEntry(entryId, confirmationEntryId);
       }),
   );
 
   server.registerTool(
-    "list_media_works",
+    "restore_item",
     {
-      title: "列出媒体作品",
+      title: "从回收站恢复",
+      description: "按 id 恢复被删除的动态、书、音乐、地点或游戏。动态恢复后是仅自己可见。",
+      inputSchema: z.object({ id: idSchema }),
+      annotations: { ...safeWriteAnnotations, idempotentHint: true },
+    },
+    ({ id }) =>
+      toolResult(async () => {
+        switch (kindOfId(id)) {
+          case "entry":
+            return core.restoreEntry(id);
+          case "shelf":
+            return core.restoreShelfItem(id, (await core.getShelfItem(id)).versionNo);
+          case "place":
+            return core.restorePlace(id, (await core.getPlace(id)).versionNo);
+          case "game":
+            return core.restoreGameLibraryItem(id, (await core.getGameLibraryItem(id)).versionNo);
+          default:
+            throw domainError("UNKNOWN_ID", `不能恢复 ${id}。`);
+        }
+      }),
+  );
+
+  server.registerTool(
+    "publish_entry",
+    {
+      title: "公开一条动态（两步）",
       description:
-        "列出动漫、影视、游戏或音乐作品，可按标题、观看状态与媒体类型筛选。",
-      inputSchema: listMediaWorksInputSchema,
-      annotations: readOnlyAnnotations,
+        "第一步只传 entryId：返回公开预览、actionId 和确认码，先把预览给用户看。用户同意后第二步：再传 entryId + actionId + confirmationCode 才会真正公开。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        actionId: idSchema.optional().describe("第二步才填，来自第一步的返回"),
+        confirmationCode: z.string().trim().min(1).max(80).optional().describe("第二步才填，来自第一步的返回"),
+      }),
+      annotations: { ...safeWriteAnnotations, openWorldHint: true },
     },
-    (input) =>
-      toolResult(() => core.listMediaWorks(listMediaWorksInputSchema.parse(input))),
-  );
-
-  server.registerTool(
-    "get_media_work",
-    {
-      title: "读取媒体作品详情",
-      description:
-        "按 mediaWorkId 读取作品资料、季度和关联日志；不存在时返回 null。",
-      inputSchema: mediaWorkIdToolSchema,
-      annotations: readOnlyAnnotations,
-    },
-    ({ mediaWorkId }) => toolResult(() => core.getMediaWork(mediaWorkId)),
-  );
-
-  server.registerTool(
-    "list_game_library",
-    {
-      title: "读取 PlayStation 游戏库",
-      description:
-        "读取已经迁入 Life Ledger 的完整 PlayStation 游戏清单，包括游玩时长、进度、评分、奖杯和评论。",
-      inputSchema: z.object({}),
-      annotations: readOnlyAnnotations,
-    },
-    () => toolResult(() => core.listGameLibrary()),
-  );
-
-  server.registerTool(
-    "create_game_library_item",
-    {
-      title: "创建 PlayStation 游戏",
-      description:
-        "在专用游戏库创建游戏，支持平台、时长、进度、奖杯、成就、评分、评价、标签和封面。",
-      inputSchema: createGameLibraryItemToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) =>
-      toolResult(() =>
-        core.createGameLibraryItem(
-          createGameLibraryItemInputSchema.parse(input),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "update_game_library_item",
-    {
-      title: "更新 PlayStation 游戏",
-      description:
-        "使用 versionNo 乐观锁更新专用游戏库条目，避免覆盖并发修改。",
-      inputSchema: updateGameLibraryItemToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ gameLibraryItemId, ...input }) =>
-      toolResult(() =>
-        core.updateGameLibraryItem(
-          gameLibraryItemId,
-          updateGameLibraryItemInputSchema.parse(input),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "delete_game_library_item",
-    {
-      title: "将 PlayStation 游戏移入回收站",
-      description:
-        "软删除专用游戏库条目，可恢复；必须提供当前 versionNo 并显式确认。",
-      inputSchema: mutateGameLibraryItemToolSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    ({ gameLibraryItemId, versionNo }) =>
-      toolResult(() =>
-        core.deleteGameLibraryItem(gameLibraryItemId, versionNo),
-      ),
-  );
-
-  server.registerTool(
-    "restore_game_library_item",
-    {
-      title: "恢复 PlayStation 游戏",
-      description:
-        "从回收站恢复专用游戏库条目；必须提供当前 versionNo 并显式确认。",
-      inputSchema: mutateGameLibraryItemToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ gameLibraryItemId, versionNo }) =>
-      toolResult(() =>
-        core.restoreGameLibraryItem(gameLibraryItemId, versionNo),
-      ),
-  );
-
-  server.registerTool(
-    "list_shelf_items",
-    {
-      title: "读取书架与音乐",
-      description:
-        "读取读过/在读/想读的书（kind=book）和听过的专辑、单曲、歌单（kind=music）。可按 shelfStatus（planned 想读想听、in_progress 在读在循环、done 读完听过、dropped 弃了）和关键词筛选；写入前先查，避免重复创建。",
-      inputSchema: listShelfItemsInputSchema,
-      annotations: readOnlyAnnotations,
-    },
-    (input) => toolResult(() => core.listShelfItems(listShelfItemsInputSchema.parse(input))),
-  );
-
-  server.registerTool(
-    "create_shelf_item",
-    {
-      title: "添加一本书或一张专辑/一首歌",
-      description:
-        "在书架（kind=book，format 可选 paper/ebook/audiobook）或音乐（kind=music，format 可选 album/track/playlist）里新建条目。creator 填作者或歌手；rating 0–10；review 是评价原文；excerpts 是摘抄或喜欢的歌词；日期用 YYYY-MM-DD。封面可用 upload_media_image 返回的 publicUrl。",
-      inputSchema: createShelfItemInputSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) =>
-      toolResult(() => core.createShelfItem(createShelfItemInputSchema.parse(input))),
-  );
-
-  server.registerTool(
-    "update_shelf_item",
-    {
-      title: "更新书架/音乐条目",
-      description:
-        "用 versionNo 乐观锁更新书或音乐条目，例如读完后把 shelfStatus 改成 done、补 finishedOn 和评分。excerpts 会整体替换；只想追加一条摘抄请用 add_shelf_excerpt。",
-      inputSchema: updateShelfItemToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ shelfItemId, ...input }) =>
-      toolResult(() =>
-        core.updateShelfItem(shelfItemId, updateShelfItemInputSchema.parse(input)),
-      ),
-  );
-
-  server.registerTool(
-    "add_shelf_excerpt",
-    {
-      title: "追加一条摘抄或歌词",
-      description:
-        "给书追加一条摘抄，或给音乐追加一句喜欢的歌词；location 可写页码、章节或曲目，note 写当时的想法。需要当前 versionNo。",
-      inputSchema: addShelfExcerptToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ shelfItemId, ...input }) =>
-      toolResult(() =>
-        core.addShelfExcerpt(shelfItemId, addShelfExcerptInputSchema.parse(input)),
-      ),
-  );
-
-  server.registerTool(
-    "delete_shelf_item",
-    {
-      title: "将书架/音乐条目移入回收站",
-      description: "软删除书或音乐条目，可恢复；必须提供当前 versionNo 并显式确认。",
-      inputSchema: mutateShelfItemToolSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    ({ shelfItemId, versionNo }) =>
-      toolResult(() => core.deleteShelfItem(shelfItemId, versionNo)),
-  );
-
-  server.registerTool(
-    "restore_shelf_item",
-    {
-      title: "恢复书架/音乐条目",
-      description: "从回收站恢复书或音乐条目；必须提供当前 versionNo 并显式确认。",
-      inputSchema: mutateShelfItemToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ shelfItemId, versionNo }) =>
-      toolResult(() => core.restoreShelfItem(shelfItemId, versionNo)),
-  );
-
-  server.registerTool(
-    "list_places",
-    {
-      title: "读取足迹",
-      description:
-        "读取去过的地方（城市、景点、餐厅、住处等），可按年份 year 或关键词（地名、城市、国家、旅行名）筛选；写入前先查，避免重复。",
-      inputSchema: listPlacesInputSchema,
-      annotations: readOnlyAnnotations,
-    },
-    (input) => toolResult(() => core.listPlaces(listPlacesInputSchema.parse(input))),
-  );
-
-  server.registerTool(
-    "create_place",
-    {
-      title: "记录一个去过的地方",
-      description:
-        "在「足迹」新增一个地点。visitedOn 必填（YYYY-MM-DD），leftOn 可选；category 取 city 城市 / sight 景点 / food 吃喝 / stay 住宿 / nature 自然 / event 活动 / other；trip 填同一次旅行的名字（如「2026 关西之旅」）以便分组；note 写原文感受。坐标 latitude/longitude 只有用户明确给出时才填，不要猜。",
-      inputSchema: createPlaceInputSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) => toolResult(() => core.createPlace(createPlaceInputSchema.parse(input))),
-  );
-
-  server.registerTool(
-    "update_place",
-    {
-      title: "更新足迹",
-      description: "用 versionNo 乐观锁更新一个地点，例如补充感受、评分或离开日期。",
-      inputSchema: updatePlaceToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ placeId, ...input }) =>
-      toolResult(() => core.updatePlace(placeId, updatePlaceInputSchema.parse(input))),
-  );
-
-  server.registerTool(
-    "delete_place",
-    {
-      title: "将足迹移入回收站",
-      description: "软删除一个地点，可恢复；必须提供当前 versionNo 并显式确认。",
-      inputSchema: mutatePlaceToolSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    ({ placeId, versionNo }) => toolResult(() => core.deletePlace(placeId, versionNo)),
-  );
-
-  server.registerTool(
-    "restore_place",
-    {
-      title: "恢复足迹",
-      description: "从回收站恢复一个地点；必须提供当前 versionNo 并显式确认。",
-      inputSchema: mutatePlaceToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ placeId, versionNo }) => toolResult(() => core.restorePlace(placeId, versionNo)),
-  );
-
-  server.registerTool(
-    "create_media_work",
-    {
-      title: "创建媒体作品",
-      description:
-        "创建动漫、影视、游戏或音乐作品，可设置别名、封面、观看状态和总评分。",
-      inputSchema: createMediaWorkInputSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) =>
-      toolResult(() =>
-        core.createMediaWork(createMediaWorkInputSchema.parse(input)),
-      ),
-  );
-
-  server.registerTool(
-    "update_media_work",
-    {
-      title: "更新媒体作品",
-      description:
-        "更新指定作品的影视分类、标题、别名、封面、观看状态或总评分；至少提供一个变更字段。",
-      inputSchema: updateMediaWorkToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ mediaWorkId, ...input }) =>
-      toolResult(() =>
-        core.updateMediaWork(
-          mediaWorkId,
-          updateMediaWorkInputSchema.parse(input),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "upload_media_image",
-    {
-      title: "上传图片到私有资源桶",
-      description:
-        "仅用于作品封面等公开图片：严格校验 Agent 已压缩的 WebP、JPEG 或 PNG，按 SHA-256 去重写入 R2，并返回公开 HTTPS URL；不会自动修改作品封面。动态里的私密照片/视频请用 upload_entry_media 或 create_entry_media_upload。",
-      inputSchema: uploadMediaImageInputSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        idempotentHint: true,
-      },
-    },
-    (input) =>
-      toolResult(() =>
-        core.uploadMediaImage(uploadMediaImageInputSchema.parse(input)),
-      ),
-  );
-
-  server.registerTool(
-    "list_seasons",
-    {
-      title: "列出影视季度",
-      description:
-        "仅在电视剧等确实需要季度结构时，列出指定影视作品的季度与观看状态；动漫每季按独立作品管理。",
-      inputSchema: mediaWorkIdToolSchema,
-      annotations: readOnlyAnnotations,
-    },
-    ({ mediaWorkId }) => toolResult(() => core.listSeasons(mediaWorkId)),
-  );
-
-  server.registerTool(
-    "create_season",
-    {
-      title: "创建影视季度",
-      description:
-        "仅为电视剧等影视作品创建季度；动漫季度应使用 create_media_work 创建为独立作品。",
-      inputSchema: createSeasonToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ mediaWorkId, ...input }) =>
-      toolResult(() =>
-        core.createSeason(
-          mediaWorkId,
-          createMediaSeasonInputSchema.parse(input),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "update_season",
-    {
-      title: "更新影视季度",
-      description:
-        "更新电视剧等影视季度的标签、序号、标题、评分或观看状态；至少提供一个变更字段。",
-      inputSchema: updateSeasonToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ seasonId, ...input }) =>
-      toolResult(() =>
-        core.updateSeason(
-          seasonId,
-          updateMediaSeasonInputSchema.parse(input),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "log_media",
-    {
-      title: "记录媒体体验",
-      description:
-        "创建私密的动漫、影视、游戏或音乐日志，可关联季度/集数、进度、评分与评论；必须提供来源和幂等键。可通过 mediaIds 附上截图、照片或视频。",
-      inputSchema: logMediaToolSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        idempotentHint: true,
-      },
-    },
-    (input) =>
-      toolResult(() =>
-        core.logMedia(
-          logMediaInputSchema.parse({
-            rawText: input.rawText,
-            mediaType: input.mediaType,
-            mediaKind: input.mediaKind,
-            title: input.title,
-            aliases: input.aliases,
-            ratingScope: input.ratingScope,
-            seasonId: input.seasonId,
-            seasonLabel: input.seasonLabel,
-            episodeLabel: input.episodeLabel,
-            progressState: input.progressState,
-            score: input.score,
-            comment: input.comment,
-            occurredAt: input.occurredAt ?? nowIso(),
-            datePrecision: input.datePrecision,
-            timezone: input.timezone,
-            source: {
-              channel: input.sourceChannel,
-              messageId: input.idempotencyKey,
-              conversationId: input.conversationId,
-            },
-            visibility: "private",
-            mediaIds: input.mediaIds,
-          }),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "prepare_publish",
-    {
-      title: "生成公开预览",
-      description:
-        "生成公开白名单快照与短时确认码，但不会立即公开；必须先把预览展示给用户。",
-      inputSchema: entryIdToolSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        openWorldHint: true,
-      },
-    },
-    ({ entryId }) => toolResult(() => core.preparePublish(entryId)),
-  );
-
-  server.registerTool(
-    "confirm_action",
-    {
-      title: "确认公开记录",
-      description:
-        "用 actionId 和 confirmationCode 确认已经预览过的公开操作；只有白名单快照会进入公开投影。",
-      inputSchema: confirmActionToolSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        openWorldHint: true,
-      },
-    },
-    (input) =>
-      toolResult(() =>
-        core.confirmAction({
-          actionId: input.actionId,
-          confirmationCode: input.confirmationCode,
-        }),
+    ({ entryId, actionId, confirmationCode }) =>
+      toolResult<unknown>(() =>
+        actionId && confirmationCode
+          ? core.confirmAction({ actionId, confirmationCode })
+          : core.preparePublish(entryId),
       ),
   );
 
   server.registerTool(
     "unpublish_entry",
     {
-      title: "取消公开记录",
-      description: "立即从公开投影移除一条记录，并把它恢复为私密可见。",
-      inputSchema: entryIdToolSchema,
-      annotations: {
-        ...safeWriteAnnotations,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
+      title: "取消公开",
+      description: "把一条公开的动态立即改回仅自己可见。",
+      inputSchema: z.object({ entryId: idSchema }),
+      annotations: { ...safeWriteAnnotations, idempotentHint: true, openWorldHint: true },
     },
     ({ entryId }) => toolResult(() => core.unpublishEntry(entryId)),
   );
 
   server.registerTool(
-    "upload_entry_media",
+    "settings",
     {
-      title: "上传动态照片/短视频（Base64）",
-      description:
-        "把一张照片或一段很短的视频以 Base64 上传为私密媒体，返回 mediaId；再在 capture_entry / log_media 的 mediaIds 里使用，或用 attach_entry_media 挂到已有记录。解码后不超过 10 MB；更大的文件（尤其是视频）请用 create_entry_media_upload。支持 JPEG、PNG、WebP、GIF、MP4、MOV、WebM，服务端会校验文件头。",
-      inputSchema: uploadEntryMediaInputSchema,
+      title: "查看或修改设置",
+      description: "不传参数就返回当前设置（时区等）；传了哪个字段就只改哪个字段。",
+      inputSchema: settingsSchema.partial(),
       annotations: safeWriteAnnotations,
     },
     (input) =>
-      toolResult(() =>
-        core.uploadEntryMedia(uploadEntryMediaInputSchema.parse(input)),
-      ),
-  );
-
-  server.registerTool(
-    "create_entry_media_upload",
-    {
-      title: "申请一次性上传地址（大文件/视频）",
-      description:
-        "为一张照片或一段视频（视频最大 95 MB，照片最大 20 MB）申请 30 分钟内有效、只能用一次的上传地址。返回 mediaId、uploadUrl 与 curl 示例：用 HTTP PUT 把文件原始字节发到 uploadUrl，Content-Type 必须与 mimeType 一致（例如 curl -X PUT -H 'Content-Type: video/mp4' --data-binary @clip.mp4 <uploadUrl>）。上传成功后，再把 mediaId 放进 capture_entry / log_media 的 mediaIds 或 attach_entry_media。文件内容不会经过对话上下文。",
-      inputSchema: createEntryMediaUploadInputSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) =>
-      toolResult(() =>
-        core.createEntryMediaUpload(
-          createEntryMediaUploadInputSchema.parse(input),
-        ),
-      ),
-  );
-
-  server.registerTool(
-    "attach_entry_media",
-    {
-      title: "给已有记录添加照片/视频",
-      description:
-        "把已上传但尚未使用的 mediaId 追加到一条已有记录后面（例如微信里先发文字、后发照片）。每条记录最多 9 个照片/视频。",
-      inputSchema: z.object({
-        entryId: idSchema,
-        mediaIds: z.array(idSchema).min(1).max(ENTRY_MEDIA_LIMITS.maxPerEntry),
+      toolResult(async () => {
+        const current = await core.getSettings();
+        const patch = defined(input);
+        return Object.keys(patch).length
+          ? core.updateSettings(settingsSchema.parse({ ...current, ...patch }))
+          : current;
       }),
-      annotations: safeWriteAnnotations,
-    },
-    ({ entryId, mediaIds }) =>
-      toolResult(() => core.attachEntryMedia(entryId, mediaIds)),
-  );
-
-  server.registerTool(
-    "remove_entry_media",
-    {
-      title: "从记录中移除照片/视频",
-      description:
-        "从记录中移除一个照片或视频，并永久删除存储里的文件，不可恢复。必须显式传入 confirmRemove=true。",
-      inputSchema: z.object({
-        entryId: idSchema,
-        mediaId: idSchema,
-        confirmRemove: z.literal(true),
-      }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    ({ entryId, mediaId }) =>
-      toolResult(() => core.deleteEntryMedia(entryId, mediaId)),
-  );
-
-  server.registerTool(
-    "add_entry_follow_up",
-    {
-      title: "补充记录",
-      description:
-        "给已有记录追加一段补充（后续想法），原文保持不变；补充按时间顺序显示在该条动态下方。",
-      inputSchema: z.object({
-        entryId: idSchema,
-        body: z.string().trim().min(1).max(50_000),
-      }),
-      annotations: safeWriteAnnotations,
-    },
-    ({ entryId, body }) =>
-      toolResult(() =>
-        core.addEntryFollowUp(entryId, { body, sourceChannel: "mcp" }),
-      ),
-  );
-
-  server.registerTool(
-    "delete_entry_follow_up",
-    {
-      title: "删除补充",
-      description:
-        "删除一条记录下的某条补充（followUpId 来自 get_entry 返回的 followUps），不可恢复。必须显式传入 confirmDelete=true。",
-      inputSchema: z.object({
-        entryId: idSchema,
-        followUpId: idSchema,
-        confirmDelete: z.literal(true),
-      }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
-    },
-    ({ entryId, followUpId }) =>
-      toolResult(() => core.deleteEntryFollowUp(entryId, followUpId)),
-  );
-
-  server.registerTool(
-    "import_dry_run",
-    {
-      title: "试运行数据导入",
-      description:
-        "校验并暂存导入数据，只生成重复项/错误报告，不改动正式事实表。",
-      inputSchema: importDryRunInputSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) =>
-      toolResult(() =>
-        core.createImportDryRun(importDryRunInputSchema.parse(input)),
-      ),
-  );
-
-  server.registerTool(
-    "import_commit",
-    {
-      title: "确认提交导入批次",
-      description:
-        "确认提交已经试运行过的导入批次。必须显式传入 confirmCommit=true。",
-      inputSchema: importCommitToolSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    ({ batchId }) => toolResult(() => core.commitImport(batchId)),
-  );
-
-  server.registerTool(
-    "export_create",
-    {
-      title: "创建私密导出",
-      description:
-        "创建完整或增量私密导出任务；返回导出记录，可用 export_list 跟踪状态。",
-      inputSchema: exportCreateToolSchema,
-      annotations: safeWriteAnnotations,
-    },
-    ({ scope }) => toolResult(() => core.createExport(scope)),
-  );
-
-  server.registerTool(
-    "export_list",
-    {
-      title: "列出导出任务",
-      description:
-        "列出最近的私密导出任务、完成状态、大小、行数和校验和，不暴露 R2 对象键。",
-      inputSchema: z.object({}),
-      annotations: readOnlyAnnotations,
-    },
-    () => toolResult(() => core.listExports()),
-  );
-
-  server.registerTool(
-    "export_verify",
-    {
-      title: "校验导出归档",
-      description:
-        "重新计算指定导出归档的 SHA-256 与大小，并与记录值比对；不会返回归档内容或 R2 对象键。",
-      inputSchema: exportIdToolSchema,
-      annotations: readOnlyAnnotations,
-    },
-    ({ exportId }) => toolResult(() => core.verifyExport(exportId)),
-  );
-
-  server.registerTool(
-    "settings_get",
-    {
-      title: "读取个人设置",
-      description:
-        "读取时区、采集模式、公开预览、敏感信息警告和备份保留设置。",
-      inputSchema: z.object({}),
-      annotations: readOnlyAnnotations,
-    },
-    () => toolResult(() => core.getSettings()),
-  );
-
-  server.registerTool(
-    "settings_update",
-    {
-      title: "更新个人设置",
-      description:
-        "用完整设置对象更新 Life Ledger 个人设置；字段会经过严格校验。",
-      inputSchema: settingsSchema,
-      annotations: safeWriteAnnotations,
-    },
-    (input) =>
-      toolResult(() => core.updateSettings(settingsSchema.parse(input))),
   );
 
   registerContextResources(server, core);
@@ -1460,8 +1251,9 @@ function registerReviewPrompts(server: McpServer) {
           "请为我写一份 Life Ledger 周回顾，覆盖截至现在的最近 7 天。",
           "步骤：",
           "1. 调用 get_stats，from 为 7 天前、to 为现在。",
-          "2. 调用 get_recent_entries，用同一时间范围（occurredFrom / occurredTo）翻页读取记录原文。",
-          "3. 按「看了什么 / 想了什么 / 心情走势 / 值得延续或调整的事」四部分输出，最后给一句总结。",
+          "2. 调用 search_entries，用同一时间范围（occurredFrom / occurredTo）翻页读取记录原文。",
+          "3. 调用 search_all（kinds 为 book、music、place，query 留空）看看这周读了、听了、去了什么。",
+          "4. 按「看了什么 / 读了听了什么 / 去了哪里 / 想了什么 / 心情走势 / 值得延续或调整的事」输出，最后给一句总结。",
           `规则：\n- ${REVIEW_RULES}`,
         ].join("\n"),
       ),
@@ -1487,8 +1279,9 @@ function registerReviewPrompts(server: McpServer) {
           "步骤：",
           "1. 先读取资源 life-ledger://settings 确认时区，再计算该月第一天 00:00 到下月第一天 00:00 的区间。",
           "2. 调用 get_stats 获取该区间的统计。",
-          "3. 用 get_recent_entries 按同一区间翻页读取记录，重点阅读 mood、thought、idea 与有评分的媒体记录。",
-          "4. 输出：本月数字概览、媒体清单与评分、反复出现的主题、情绪变化、下个月可以尝试的一件事。",
+          "3. 用 search_entries 按同一区间翻页读取记录，重点阅读 mood、thought、idea 与有评分的媒体记录。",
+          "4. 用 search_all（kinds 为 book、music、place）找出这个月读完的书、听的音乐和去过的地方。",
+          "5. 输出：本月数字概览、看/读/听的清单与评分、去过的地方、反复出现的主题、情绪变化、下个月可以尝试的一件事。",
           `规则：\n- ${REVIEW_RULES}`,
         ].join("\n"),
       ),

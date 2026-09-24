@@ -41,8 +41,8 @@ active ── soft delete ──> deleted ── restore ──> active + privat
   登记 `entry_media` 元数据并在发布动态时挂到记录上。浏览器端会先把照片缩到长边
   2560px 的 JPEG（同时去掉 EXIF 定位）。这些对象只经需要会话的 `/media/entry-media/*`
   读取，支持 Range 以便视频拖动播放；永久清除记录时 Core 一并删除对象。
-- MCP 有两条路：`upload_entry_media` 以 Base64（≤ 10 MB）交给 Core 校验后写入同一前缀；
-  `create_entry_media_upload` 由 Core 签发 30 分钟、一次性的上传令牌（D1 只存哈希），
+- MCP 有两条路：`upload_photo` 以 Base64（≤ 10 MB）交给 Core 校验后写入同一前缀；
+  `create_upload_url` 由 Core 签发 30 分钟、一次性的上传令牌（D1 只存哈希），
   Agent 用 `PUT /upload/entry-media/{token}` 直传 Web Worker，该路径不需要会话，
   令牌即凭证，领取后立即作废。
 - 「补充」保存在 `entry_follow_ups`，原文不被改写；Web 与 MCP（`add_entry_follow_up`）都可追加。

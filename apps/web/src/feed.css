@@ -1147,6 +1147,52 @@ button.feed-work-card:hover {
   font-size: 12px;
 }
 
+/* Linked book / record / place / game ------------------------------------- */
+
+.feed-link-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--feed-line);
+  border-radius: var(--feed-radius);
+  background: #ffffff;
+  color: var(--feed-ink);
+  text-align: left;
+}
+
+.feed-link-card:hover {
+  background: #fafafb;
+}
+
+.feed-link-card > img,
+.feed-link-placeholder {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.feed-link-card.is-book > img,
+.feed-link-card.is-book .feed-link-placeholder {
+  height: 80px;
+  border-radius: 3px 8px 8px 3px;
+}
+
+.feed-link-placeholder {
+  display: grid;
+  place-items: center;
+  background: #eef0f4;
+  color: var(--feed-sub);
+}
+
+.feed-link-card.is-book .feed-work-copy small svg { color: #8a4b2a; }
+.feed-link-card.is-music .feed-work-copy small svg { color: #5b3fb3; }
+.feed-link-card.is-place .feed-work-copy small svg { color: #1f6f6a; }
+.feed-link-card.is-game .feed-work-copy small svg { color: #2456c9; }
+
 .feed-post-tags {
   display: flex;
   flex-wrap: wrap;

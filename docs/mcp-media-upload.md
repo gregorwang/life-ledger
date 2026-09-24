@@ -1,5 +1,8 @@
 # MCP 图片上传
 
+> 0.5.0 起 Agent 通过 `upload_photo`（`purpose=cover`）调用这里描述的公开图片上传，
+> 再用 `save_media_work` 写入 `coverUrl`；底层契约不变。
+
 `upload_media_image` 接收 Agent 已压缩的位图，完成字节级校验、SHA-256
 内容寻址、R2 去重和 D1 审计，并返回可直接写入 `coverUrl` 的公开 HTTPS
 URL。上传本身不会修改作品。

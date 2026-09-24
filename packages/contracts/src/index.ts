@@ -271,6 +271,15 @@ export const sourceSchema = z.object({
   conversationId: z.string().min(1).max(256).nullable().default(null),
 });
 
+export const entryLinkKindSchema = z.enum(["shelf", "place", "game"]);
+
+export const entryLinkInputSchema = z
+  .object({
+    kind: entryLinkKindSchema,
+    id: z.string().trim().min(1).max(128),
+  })
+  .strict();
+
 export const captureEntryInputSchema = z.object({
   rawText: z.string().trim().min(1).max(50_000),
   type: entryTypeSchema
@@ -287,6 +296,8 @@ export const captureEntryInputSchema = z.object({
   mediaIds: entryMediaIdsSchema,
   /** Mood emoji such as "😊"; stored as a `mood:` tag and implies type "mood". */
   mood: z.string().trim().min(1).max(16).optional(),
+  /** Books, records, places or games this post is about. */
+  links: z.array(entryLinkInputSchema).min(1).max(5).optional(),
 });
 
 export const logMediaInputSchema = z
@@ -454,16 +465,16 @@ export const createGameLibraryItemInputSchema = z
   .object({
     platform: z.string().trim().min(1).max(80),
     title: z.string().trim().min(1).max(300),
-    playTime: z.string().trim().min(1).max(80),
-    progress: z.number().int().min(0).max(100),
-    trophies: gameTrophiesSchema,
-    achievementsCurrent: z.number().int().min(0),
-    achievementsTotal: z.number().int().min(0),
+    playTime: z.string().trim().min(1).max(80).default("0h"),
+    progress: z.number().int().min(0).max(100).default(0),
+    trophies: gameTrophiesSchema.default({ platinum: 0, gold: 0, silver: 0, bronze: 0 }),
+    achievementsCurrent: z.number().int().min(0).default(0),
+    achievementsTotal: z.number().int().min(0).default(0),
     rating: z.number().min(0).max(10).multipleOf(0.1),
     review: z.string().trim().max(50_000).default(""),
     tags: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
-    coverUrl: z.string().trim().min(1).max(2_000),
-    sourceUrl: z.string().trim().min(1).max(2_000),
+    coverUrl: z.string().trim().max(2_000).default(""),
+    sourceUrl: z.string().trim().max(2_000).default(""),
   })
   .strict()
   .superRefine((value, context) => {
@@ -787,6 +798,22 @@ export const listPlacesInputSchema = z.object({
   limit: z.number().int().min(1).max(2_000).default(1_000),
 });
 
+export const searchKindSchema = z.enum([
+  "entry",
+  "book",
+  "music",
+  "place",
+  "game",
+  "anime",
+  "screen",
+]);
+
+export const searchAllInputSchema = z.object({
+  query: z.string().trim().max(200).default(""),
+  kinds: z.array(searchKindSchema).max(7).default([]),
+  limit: z.number().int().min(1).max(50).default(10),
+});
+
 export const updateEntryInputSchema = z.object({
   versionNo: z.number().int().positive(),
   bodyRaw: z.string().trim().min(1).max(50_000).optional(),
@@ -1056,6 +1083,35 @@ export interface EntryFollowUp {
   createdAt: string;
 }
 
+export type SearchKind = z.infer<typeof searchKindSchema>;
+export type SearchAllInput = z.input<typeof searchAllInputSchema>;
+
+export interface SearchHit {
+  kind: SearchKind;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  /** YYYY-MM-DD or ISO time, whichever the item has. */
+  date: string | null;
+  rating: number | null;
+  excerpt: string | null;
+}
+
+export type EntryLinkKind = z.infer<typeof entryLinkKindSchema>;
+export type EntryLinkInput = z.infer<typeof entryLinkInputSchema>;
+
+/** A linked item, resolved for display. */
+export interface EntryLink {
+  kind: EntryLinkKind;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  coverUrl: string | null;
+  rating: number | null;
+  /** book / music for shelf links. */
+  shelfKind: ShelfKind | null;
+}
+
 export interface EntrySummary {
   id: string;
   type: EntryType;
@@ -1079,6 +1135,7 @@ export interface EntrySummary {
   versionNo: number;
   media: EntryMedia[];
   followUps: EntryFollowUp[];
+  links: EntryLink[];
 }
 
 export interface EntryRevision {
@@ -1503,6 +1560,13 @@ export interface CoreBinding {
   updateSettings(settings: LedgerSettings): Promise<LedgerSettings>;
   getProfile(): Promise<LedgerProfile>;
   getArchiveSnapshot(): Promise<ArchiveSnapshot>;
+  listLinkedEntries(kind: EntryLinkKind, id: string): Promise<EntrySummary[]>;
+  searchAll(input: SearchAllInput): Promise<SearchHit[]>;
+  getShelfItem(id: string): Promise<ShelfItem>;
+  getPlace(id: string): Promise<Place>;
+  getGameLibraryItem(id: string): Promise<GameLibraryItem>;
+  deleteFollowUpById(followUpId: string): Promise<EntryDetail>;
+  removeEntryMediaById(mediaId: string): Promise<EntryDetail>;
   getYearReview(year: number): Promise<YearReview>;
   listPlaces(input: ListPlacesInput): Promise<Place[]>;
   createPlace(input: CreatePlaceInput): Promise<Place>;

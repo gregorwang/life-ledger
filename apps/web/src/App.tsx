@@ -63,6 +63,8 @@ import {
 import {
   MOOD_TAG_PREFIX,
   withMoodTag,
+  type EntryLink,
+  type SearchHit,
   type ImportDryRunReport,
   type LedgerProfile,
   type PendingAction,
@@ -85,6 +87,7 @@ import {
   preparePublish as apiPreparePublish,
   purgeEntry as apiPurgeEntry,
   saveProfile as apiSaveProfile,
+  searchEverything,
   saveSettings as apiSaveSettings,
   updateEntryBody,
   updateEntryTags,
@@ -361,6 +364,19 @@ function getRoutePath(route: AppRoute): string {
   }
 }
 
+/** Library page for a linked item, opened on that item. */
+function linkPath(link: EntryLink): string {
+  const base =
+    link.kind === "place"
+      ? ROUTES.places
+      : link.kind === "game"
+        ? ROUTES.games
+        : link.shelfKind === "music"
+          ? ROUTES.music
+          : ROUTES.books;
+  return `${base}?item=${encodeURIComponent(link.id)}`;
+}
+
 function entryPath(id: string): string {
   return `/entries/${encodeURIComponent(id)}`;
 }
@@ -422,6 +438,10 @@ export function App() {
   const [route, setRoute] = useState<AppRoute>(() =>
     parseRoute(window.location.pathname),
   );
+  // ?item=<id> asks a library page to open that item (links from 日常 posts).
+  const [focusItem, setFocusItem] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("item"),
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -449,7 +469,9 @@ export function App() {
 
   const navigate = (path: string) => {
     window.history.pushState({}, "", path);
-    setRoute(parseRoute(path));
+    const url = new URL(path, window.location.origin);
+    setRoute(parseRoute(url.pathname));
+    setFocusItem(url.searchParams.get("item"));
     setMobileNavOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -530,7 +552,10 @@ export function App() {
   };
 
   useEffect(() => {
-    const handlePopState = () => setRoute(parseRoute(window.location.pathname));
+    const handlePopState = () => {
+      setRoute(parseRoute(window.location.pathname));
+      setFocusItem(new URLSearchParams(window.location.search).get("item"));
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       const isTyping =
@@ -679,6 +704,7 @@ export function App() {
           episodeLabel: "",
           mediaIds: post.mediaIds,
           tags: post.tags,
+          ...(post.links ? { links: post.links } : {}),
         },
         works,
       );
@@ -858,6 +884,7 @@ export function App() {
             route,
             composerSignal,
             onCreatePost: createPost,
+            focusItem,
             profile,
             onSaveProfile: saveProfile,
             onSetMood: (entryId, mood) => {
@@ -928,6 +955,7 @@ interface RenderRouteProps {
   route: AppRoute;
   composerSignal: number;
   onCreatePost: (post: NewPost) => Promise<boolean>;
+  focusItem: string | null;
   profile: LedgerProfile;
   onSaveProfile: (profile: LedgerProfile) => Promise<boolean>;
   onSetMood: (entryId: string, mood: string | null) => void;
@@ -1006,19 +1034,33 @@ function renderRoute(props: RenderRouteProps): ReactNode {
         />
       );
     case "games":
-      return <GameLibraryPage />;
+      return (
+        <GameLibraryPage
+          focusId={props.focusItem}
+          onOpenEntry={(id) => props.navigate(entryPath(id))}
+        />
+      );
     case "books":
     case "music":
       return (
         <ShelfPage
           key={props.route.kind}
           kind={props.route.kind === "books" ? "book" : "music"}
+          focusId={props.focusItem}
+          onOpenEntry={(id) => props.navigate(entryPath(id))}
           onCreatePost={props.onCreatePost}
           pushToast={props.pushToast}
         />
       );
     case "places":
-      return <PlacesPage onCreatePost={props.onCreatePost} pushToast={props.pushToast} />;
+      return (
+        <PlacesPage
+          focusId={props.focusItem}
+          onOpenEntry={(id) => props.navigate(entryPath(id))}
+          onCreatePost={props.onCreatePost}
+          pushToast={props.pushToast}
+        />
+      );
     case "review":
       return <ReviewPage onOpenEntry={(id) => props.navigate(entryPath(id))} />;
     case "anime-detail":
@@ -1356,6 +1398,7 @@ function TimelinePage(props: TimelinePageProps) {
         onOpenCommand={props.onOpenCommand}
         onOpenEntry={(entryId) => props.navigate(entryPath(entryId))}
         onOpenWork={(workId) => props.navigate(animePath(workId))}
+        onOpenLink={(link) => props.navigate(linkPath(link))}
         onEdit={(entry) => setEditingId(entry.id)}
         onPublish={(entry) => {
           void props
@@ -4665,6 +4708,46 @@ interface CommandPaletteProps {
   onNavigate: (path: string) => void;
 }
 
+const SEARCH_KIND_LABELS: Record<SearchHit["kind"], string> = {
+  entry: "动态",
+  book: "书",
+  music: "音乐",
+  place: "足迹",
+  game: "游戏",
+  anime: "番剧",
+  screen: "影视",
+};
+
+const SEARCH_KIND_ICONS: Record<SearchHit["kind"], LucideIcon> = {
+  entry: Inbox,
+  book: BookOpen,
+  music: Music2,
+  place: MapPin,
+  game: Gamepad2,
+  anime: Library,
+  screen: Film,
+};
+
+function searchHitPath(hit: SearchHit): string {
+  const item = `?item=${encodeURIComponent(hit.id)}`;
+  switch (hit.kind) {
+    case "entry":
+      return entryPath(hit.id);
+    case "book":
+      return `${ROUTES.books}${item}`;
+    case "music":
+      return `${ROUTES.music}${item}`;
+    case "place":
+      return `${ROUTES.places}${item}`;
+    case "game":
+      return `${ROUTES.games}${item}`;
+    case "anime":
+      return animePath(hit.id);
+    case "screen":
+      return ROUTES.movies;
+  }
+}
+
 function CommandPalette({
   open,
   entries,
@@ -4673,13 +4756,33 @@ function CommandPalette({
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
 
   useEffect(() => {
     if (open) {
       setQuery("");
       setActiveIndex(0);
+      setHits(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    const needle = query.trim();
+    if (!open || !needle) {
+      setHits(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchEverything(needle, controller.signal)
+        .then(setHits)
+        .catch(() => undefined);
+    }, 180);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, query]);
 
   if (!open) {
     return null;
@@ -4689,16 +4792,21 @@ function CommandPalette({
   const pageResults = NAV_ITEMS.filter((item) =>
     item.label.toLocaleLowerCase("zh-CN").includes(normalized),
   ).slice(0, 4);
-  const entryResults = entries
-    .filter((entry) =>
-      `${entry.title} ${entry.bodyRaw}`
-        .toLocaleLowerCase("zh-CN")
-        .includes(normalized),
-    )
-    .slice(0, 5);
+  // Until the server answers (or with an empty query) show recent local posts.
+  const entryResults = hits
+    ? []
+    : entries
+        .filter((entry) =>
+          `${entry.title} ${entry.bodyRaw}`
+            .toLocaleLowerCase("zh-CN")
+            .includes(normalized),
+        )
+        .slice(0, 5);
+  const hitResults = hits ?? [];
   const resultPaths = [
     ...pageResults.map((item) => item.path),
     ...entryResults.map((entry) => entryPath(entry.id)),
+    ...hitResults.map(searchHitPath),
   ];
 
   const handleResultKeys = (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -4738,9 +4846,9 @@ function CommandPalette({
           <input
             autoFocus
             type="search"
-            aria-label="搜索记录或跳转页面"
+            aria-label="搜索所有记录或跳转页面"
             value={query}
-            placeholder="搜索记录或跳转页面"
+            placeholder="搜动态、书、音乐、足迹、游戏、番剧…"
             onChange={(event) => {
               setQuery(event.target.value);
               setActiveIndex(0);
@@ -4807,8 +4915,46 @@ function CommandPalette({
               })}
             </>
           ) : null}
-          {!pageResults.length && !entryResults.length ? (
-            <div className="command-empty">没有匹配结果</div>
+          {hitResults.length ? (
+            <>
+              <span className="command-group-label">所有库</span>
+              {hitResults.map((hit, index) => {
+                const resultIndex = pageResults.length + entryResults.length + index;
+                const Icon = SEARCH_KIND_ICONS[hit.kind];
+                return (
+                  <button
+                    className={activeIndex === resultIndex ? "is-active" : ""}
+                    key={`${hit.kind}:${hit.id}`}
+                    type="button"
+                    aria-current={activeIndex === resultIndex}
+                    onMouseEnter={() => setActiveIndex(resultIndex)}
+                    onClick={() => onNavigate(searchHitPath(hit))}
+                  >
+                    <span className="command-icon">
+                      <Icon aria-hidden="true" size={17} />
+                    </span>
+                    <span>
+                      <strong>{hit.title}</strong>
+                      <small>
+                        {SEARCH_KIND_LABELS[hit.kind]}
+                        {hit.kind === "entry"
+                          ? hit.date
+                            ? ` · ${new Date(hit.date).toLocaleDateString("zh-CN")}`
+                            : ""
+                          : hit.subtitle
+                            ? ` · ${hit.subtitle}`
+                            : ""}
+                        {hit.rating !== null ? ` · ★${hit.rating.toFixed(1)}` : ""}
+                      </small>
+                    </span>
+                    <ArrowRight aria-hidden="true" size={15} />
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
+          {!pageResults.length && !entryResults.length && !hitResults.length ? (
+            <div className="command-empty">{hits === null && normalized ? "搜索中…" : "没有匹配结果"}</div>
           ) : null}
         </div>
         <footer className="command-footer">

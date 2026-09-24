@@ -178,6 +178,17 @@ function buildDiaryFiles(tables: Map<string, Row[]>, timeZone: string): ArchiveT
     followUps.set(entryId, [...(followUps.get(entryId) ?? []), row]);
   }
   const works = new Map((tables.get("media_works") ?? []).map((row) => [text(row.id), row]));
+  const linkTitles = new Map<string, string>();
+  for (const row of tables.get("shelf_items") ?? []) linkTitles.set(`shelf:${text(row.id)}`, `《${text(row.title)}》`);
+  for (const row of tables.get("places") ?? []) linkTitles.set(`place:${text(row.id)}`, text(row.name));
+  for (const row of tables.get("game_library_items") ?? []) linkTitles.set(`game:${text(row.id)}`, text(row.title));
+  const linksByEntry = new Map<string, string[]>();
+  for (const row of tables.get("entry_links") ?? []) {
+    const title = linkTitles.get(`${text(row.target_kind)}:${text(row.target_id)}`);
+    if (!title) continue;
+    const entryId = text(row.entry_id);
+    linksByEntry.set(entryId, [...(linksByEntry.get(entryId) ?? []), title]);
+  }
   const logs = new Map((tables.get("media_logs") ?? []).map((row) => [text(row.entry_id), row]));
 
   const months = new Map<string, string[]>();
@@ -222,6 +233,10 @@ function buildDiaryFiles(tables: Map<string, Row[]>, timeZone: string): ArchiveT
       );
     }
 
+    const linked = linksByEntry.get(text(entry.id));
+    if (linked?.length) {
+      lines.push(`关于：${linked.join("、")}`, "");
+    }
     lines.push(quote(text(entry.body_raw)), "");
 
     const media = [...(mediaByEntry.get(text(entry.id)) ?? [])].sort(

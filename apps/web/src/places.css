@@ -167,6 +167,25 @@
   -webkit-line-clamp: 3;
 }
 
+.pl-card.is-focused {
+  border-color: var(--sh-accent);
+  box-shadow: 0 0 0 3px var(--sh-accent-soft);
+}
+
+.pl-related-toggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  background: transparent;
+  color: var(--sh-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pl-body .related-entries {
+  margin-top: 6px;
+}
+
 .pl-tags {
   color: var(--sh-accent);
   font-size: 12px;
