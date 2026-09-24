@@ -31,7 +31,7 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 
 ## 工具面
 
-共 34 个工具，`tools/list` 的标题和说明均为中文：
+共 37 个工具，`tools/list` 的标题和说明均为中文：
 
 - 服务：`health`
 - 记录：`get_entry`、`search_entries`、`get_recent_entries`、
@@ -47,6 +47,26 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 - 导入：`import_dry_run`、`import_commit`
 - 导出：`export_create`、`export_list`、`export_verify`
 - 设置：`settings_get`、`settings_update`
+- 回顾（只读）：`get_stats`、`list_tags`、`on_this_day`
+
+`search_entries` 与 `get_recent_entries` 支持 `occurredFrom`（含）/
+`occurredTo`（不含）时间范围和 `tag` 精确标签筛选，可直接回答“上个月做了什么”。
+`get_stats` 汇总 `[from, to)` 区间：总数、活跃天数、类型与可见性分布、
+按天（≤62 天）或按月的时间分布、高频标签、媒体作品与评分排行，
+日期按个人设置时区切分。
+
+## 资源与提示词
+
+只读资源（`resources/list`），便于 Agent 开场即获得上下文：
+
+- `life-ledger://settings`：个人设置与时区
+- `life-ledger://tags`：标签词表（写入前复用，避免同义标签分裂）
+- `life-ledger://media/in-progress`：观看状态为 `watching` 的作品
+- `life-ledger://digest/last-7-days`：最近 7 天统计
+- `life-ledger://on-this-day`：那年今日
+
+提示词（`prompts/list`）：`weekly_review` 与 `monthly_recap`（可选参数
+`month=YYYY-MM`），只引导调用只读工具生成私人回顾。
 
 危险操作有额外确认字段：
 

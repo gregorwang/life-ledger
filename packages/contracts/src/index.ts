@@ -295,8 +295,40 @@ export const listEntriesInputSchema = z.object({
   mediaWorkId: z.string().trim().min(1).nullable().default(null),
   scoreMin: z.number().min(0).max(10).nullable().default(null),
   scoreMax: z.number().min(0).max(10).nullable().default(null),
+  occurredFrom: z.iso.datetime({ offset: true }).nullable().default(null),
+  occurredTo: z.iso.datetime({ offset: true }).nullable().default(null),
+  tag: z.string().trim().min(1).max(80).nullable().default(null),
   limit: z.number().int().min(1).max(100).default(50),
   cursor: z.string().trim().min(1).nullable().default(null),
+});
+
+const localDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u, "日期格式必须是 YYYY-MM-DD。");
+
+export const ledgerStatsInputSchema = z
+  .object({
+    from: z.iso.datetime({ offset: true }),
+    to: z.iso.datetime({ offset: true }),
+    timezone: z.string().trim().min(1).max(80).nullable().default(null),
+  })
+  .refine((value) => Date.parse(value.from) < Date.parse(value.to), {
+    message: "from 必须早于 to。",
+  })
+  .refine(
+    (value) =>
+      Date.parse(value.to) - Date.parse(value.from) <= 1_100 * 86_400_000,
+    { message: "统计区间最长约 3 年。" },
+  );
+
+export const listTagsInputSchema = z.object({
+  limit: z.number().int().min(1).max(500).default(200),
+});
+
+export const onThisDayInputSchema = z.object({
+  date: localDateSchema.nullable().default(null),
+  timezone: z.string().trim().min(1).max(80).nullable().default(null),
+  limit: z.number().int().min(1).max(100).default(50),
 });
 
 export const updateEntryInputSchema = z.object({
@@ -365,6 +397,68 @@ export type ListEntriesInput = z.infer<typeof listEntriesInputSchema>;
 export type UpdateEntryInput = z.infer<typeof updateEntryInputSchema>;
 export type ConfirmActionInput = z.infer<typeof confirmActionInputSchema>;
 export type LedgerSettings = z.infer<typeof settingsSchema>;
+export type LedgerStatsInput = z.input<typeof ledgerStatsInputSchema>;
+export type ListTagsInput = z.input<typeof listTagsInputSchema>;
+export type OnThisDayInput = z.input<typeof onThisDayInputSchema>;
+
+export interface CountBucket<K extends string = string> {
+  key: K;
+  count: number;
+}
+
+export interface LedgerStatsMediaWork {
+  mediaWorkId: string;
+  title: string;
+  mediaType: MediaType;
+  logCount: number;
+  lastOccurredAt: string;
+  averageScore: number | null;
+}
+
+export interface LedgerStatsRatedLog {
+  entryId: string;
+  mediaWorkId: string;
+  title: string;
+  mediaType: MediaType;
+  score: number;
+  ratingScope: RatingScope | null;
+  occurredAt: string;
+}
+
+export interface LedgerStats {
+  range: { from: string; to: string; timezone: string };
+  totalEntries: number;
+  truncated: boolean;
+  activeDays: number;
+  byType: Array<CountBucket<EntryType>>;
+  byVisibility: Array<CountBucket<EntryVisibility>>;
+  timeline: {
+    granularity: "day" | "month";
+    buckets: CountBucket[];
+  };
+  topTags: CountBucket[];
+  media: {
+    logCount: number;
+    distinctWorks: number;
+    scoredCount: number;
+    averageScore: number | null;
+    byMediaType: Array<CountBucket<MediaType>>;
+    works: LedgerStatsMediaWork[];
+    topRated: LedgerStatsRatedLog[];
+  };
+}
+
+export interface LedgerTag {
+  tag: string;
+  count: number;
+  lastUsedAt: string;
+}
+
+export interface OnThisDayResult {
+  date: string;
+  timezone: string;
+  entries: EntrySummary[];
+}
 export type ImportDryRunInput = z.infer<typeof importDryRunInputSchema>;
 
 export interface ImportDryRunReport {
@@ -704,6 +798,9 @@ export interface CoreBinding {
   ): Promise<GameLibraryItem>;
   getPublicAnime(): Promise<PublicAnimeResponse>;
   getPublicTimeline(): Promise<PublicTimelineResponse>;
+  getStats(input: LedgerStatsInput): Promise<LedgerStats>;
+  listTags(input?: ListTagsInput): Promise<LedgerTag[]>;
+  getOnThisDay(input?: OnThisDayInput): Promise<OnThisDayResult>;
   getSettings(): Promise<LedgerSettings>;
   updateSettings(settings: LedgerSettings): Promise<LedgerSettings>;
   createImportDryRun(input: ImportDryRunInput): Promise<ImportDryRunReport>;

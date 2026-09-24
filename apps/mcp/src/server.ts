@@ -7,13 +7,16 @@ import {
   createMediaSeasonInputSchema,
   createMediaWorkInputSchema,
   importDryRunInputSchema,
+  ledgerStatsInputSchema,
   listEntriesInputSchema,
+  listTagsInputSchema,
   listMediaWorksInputSchema,
   logMediaInputSchema,
   mediaKindSchema,
   mediaTypeSchema,
   mediaWatchStatusSchema,
   datePrecisionSchema,
+  onThisDayInputSchema,
   settingsSchema,
   uploadMediaImageInputSchema,
   updateEntryInputSchema,
@@ -55,6 +58,9 @@ export type McpCoreBinding = Pick<
   | "createExport"
   | "listExports"
   | "verifyExport"
+  | "getStats"
+  | "listTags"
+  | "getOnThisDay"
   | "getSettings"
   | "updateSettings"
 >;
@@ -96,6 +102,27 @@ const logMediaToolSchema = z.object({
   conversationId: z.string().trim().min(1).max(256).nullable().default(null),
 });
 
+const occurredRangeFields = {
+  occurredFrom: z.iso
+    .datetime({ offset: true })
+    .nullable()
+    .default(null)
+    .describe("发生时间下界（含），ISO 8601，例如 2026-09-01T00:00:00+09:00"),
+  occurredTo: z.iso
+    .datetime({ offset: true })
+    .nullable()
+    .default(null)
+    .describe("发生时间上界（不含），ISO 8601"),
+  tag: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .nullable()
+    .default(null)
+    .describe("只返回带有该标签的记录（不区分大小写的精确匹配）"),
+};
+
 const searchEntriesToolSchema = z.object({
   query: z.string().trim().min(1).max(300),
   type: z
@@ -120,6 +147,7 @@ const searchEntriesToolSchema = z.object({
   mediaWorkId: idSchema.nullable().default(null),
   scoreMin: z.number().min(0).max(10).nullable().default(null),
   scoreMax: z.number().min(0).max(10).nullable().default(null),
+  ...occurredRangeFields,
   limit: z.number().int().min(1).max(100).default(20),
   cursor: z.string().trim().min(1).nullable().default(null),
 });
@@ -144,6 +172,7 @@ const recentEntriesToolSchema = z.object({
     .nullable()
     .default(null),
   status: z.enum(["active", "deleted"]).default("active"),
+  ...occurredRangeFields,
   limit: z.number().int().min(1).max(100).default(20),
   cursor: z.string().trim().min(1).nullable().default(null),
 });
@@ -378,7 +407,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "搜索人生账本",
       description:
-        "按文本搜索记录，可筛选类型、可见性、状态、媒体作品、评分和游标；默认只搜有效记录。",
+        "按文本搜索记录，可筛选类型、可见性、状态、媒体作品、评分、发生时间范围、标签和游标；默认只搜有效记录。",
       inputSchema: searchEntriesToolSchema,
       annotations: readOnlyAnnotations,
     },
@@ -393,6 +422,9 @@ export function createServer(core: McpCoreBinding): McpServer {
             mediaWorkId: input.mediaWorkId,
             scoreMin: input.scoreMin,
             scoreMax: input.scoreMax,
+            occurredFrom: input.occurredFrom,
+            occurredTo: input.occurredTo,
+            tag: input.tag,
             limit: input.limit,
             cursor: input.cursor,
           }),
@@ -405,7 +437,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "读取最近记录",
       description:
-        "按时间倒序读取最近记录，可筛选类型、可见性和状态，并支持游标分页。",
+        "按时间倒序读取记录，可筛选类型、可见性、状态、发生时间范围和标签，并支持游标分页；适合回答“某段时间做了什么”。",
       inputSchema: recentEntriesToolSchema,
       annotations: readOnlyAnnotations,
     },
@@ -420,11 +452,50 @@ export function createServer(core: McpCoreBinding): McpServer {
             mediaWorkId: null,
             scoreMin: null,
             scoreMax: null,
+            occurredFrom: input.occurredFrom,
+            occurredTo: input.occurredTo,
+            tag: input.tag,
             limit: input.limit,
             cursor: input.cursor,
           }),
         ),
       ),
+  );
+
+  server.registerTool(
+    "get_stats",
+    {
+      title: "统计一段时间",
+      description:
+        "汇总 [from, to) 区间内的有效记录：总数、活跃天数、按类型/可见性分布、按天或按月的时间分布、高频标签、媒体作品与评分排行。适合周报、月报和“这段时间过得怎么样”。",
+      inputSchema: ledgerStatsInputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) => toolResult(() => core.getStats(input)),
+  );
+
+  server.registerTool(
+    "list_tags",
+    {
+      title: "列出已用标签",
+      description:
+        "按使用次数列出有效记录中已经用过的标签及最近使用时间。写入前先调用它，复用已有标签，避免同义标签分裂。",
+      inputSchema: listTagsInputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) => toolResult(() => core.listTags(input)),
+  );
+
+  server.registerTool(
+    "on_this_day",
+    {
+      title: "那年今日",
+      description:
+        "列出往年同月同日（按个人时区）的有效记录；date 缺省为今天。只包含精确或近似日期的记录。",
+      inputSchema: onThisDayInputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) => toolResult(() => core.getOnThisDay(input)),
   );
 
   server.registerTool(
@@ -926,5 +997,166 @@ export function createServer(core: McpCoreBinding): McpServer {
       toolResult(() => core.updateSettings(settingsSchema.parse(input))),
   );
 
+  registerContextResources(server, core);
+  registerReviewPrompts(server);
+
   return server;
+}
+
+async function jsonResource(uri: URL, read: () => Promise<unknown>) {
+  let payload: unknown;
+  try {
+    payload = { ok: true, data: await read() };
+  } catch (error: unknown) {
+    payload = { ok: false, error: errorDetails(error) };
+  }
+  return {
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: serialize(payload),
+      },
+    ],
+  };
+}
+
+const DAY_MS = 86_400_000;
+
+function registerContextResources(server: McpServer, core: McpCoreBinding) {
+  server.registerResource(
+    "settings",
+    "life-ledger://settings",
+    {
+      title: "个人设置",
+      description: "时区、写入模式、公开预览等设置；解释时间和写入前可先读取。",
+      mimeType: "application/json",
+    },
+    (uri) => jsonResource(uri, () => core.getSettings()),
+  );
+
+  server.registerResource(
+    "tags",
+    "life-ledger://tags",
+    {
+      title: "标签词表",
+      description: "已使用标签及次数；写入新记录时优先复用这些标签。",
+      mimeType: "application/json",
+    },
+    (uri) => jsonResource(uri, () => core.listTags({ limit: 200 })),
+  );
+
+  server.registerResource(
+    "media-in-progress",
+    "life-ledger://media/in-progress",
+    {
+      title: "正在看 / 正在玩",
+      description: "观看状态为 watching 的媒体作品，用于把新记录挂到正确作品上。",
+      mimeType: "application/json",
+    },
+    (uri) =>
+      jsonResource(uri, () =>
+        core.listMediaWorks(
+          listMediaWorksInputSchema.parse({
+            watchStatus: "watching",
+            sort: "recent_desc",
+            limit: 50,
+          }),
+        ),
+      ),
+  );
+
+  server.registerResource(
+    "digest-last-7-days",
+    "life-ledger://digest/last-7-days",
+    {
+      title: "最近 7 天概览",
+      description: "最近 7 天的统计汇总，相当于随时可读的简版周报。",
+      mimeType: "application/json",
+    },
+    (uri) =>
+      jsonResource(uri, () => {
+        const to = new Date();
+        return core.getStats({
+          from: new Date(to.getTime() - 7 * DAY_MS).toISOString(),
+          to: to.toISOString(),
+        });
+      }),
+  );
+
+  server.registerResource(
+    "on-this-day",
+    "life-ledger://on-this-day",
+    {
+      title: "那年今日",
+      description: "往年今天（按个人时区）的记录。",
+      mimeType: "application/json",
+    },
+    (uri) => jsonResource(uri, () => core.getOnThisDay({})),
+  );
+}
+
+function reviewPrompt(text: string) {
+  return {
+    messages: [
+      {
+        role: "user" as const,
+        content: { type: "text" as const, text },
+      },
+    ],
+  };
+}
+
+const REVIEW_RULES = [
+  "只依据工具返回的数据，不编造记录；数据不足就直接说明。",
+  "引用具体记录时附上 entryId，方便我回看。",
+  "不要调用任何写入、发布或删除工具。",
+].join("\n- ");
+
+function registerReviewPrompts(server: McpServer) {
+  server.registerPrompt(
+    "weekly_review",
+    {
+      title: "生成周回顾",
+      description: "基于最近 7 天的统计和记录，写一份私人周回顾。",
+    },
+    () =>
+      reviewPrompt(
+        [
+          "请为我写一份 Life Ledger 周回顾，覆盖截至现在的最近 7 天。",
+          "步骤：",
+          "1. 调用 get_stats，from 为 7 天前、to 为现在。",
+          "2. 调用 get_recent_entries，用同一时间范围（occurredFrom / occurredTo）翻页读取记录原文。",
+          "3. 按「看了什么 / 想了什么 / 心情走势 / 值得延续或调整的事」四部分输出，最后给一句总结。",
+          `规则：\n- ${REVIEW_RULES}`,
+        ].join("\n"),
+      ),
+  );
+
+  server.registerPrompt(
+    "monthly_recap",
+    {
+      title: "生成月度回顾",
+      description: "基于指定月份的统计和记录，写一份月度回顾；缺省为上个月。",
+      argsSchema: {
+        month: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/u)
+          .optional()
+          .describe("YYYY-MM，缺省为上个月"),
+      },
+    },
+    ({ month }) =>
+      reviewPrompt(
+        [
+          `请为我写一份 Life Ledger 月度回顾，月份：${month ?? "上个月"}（按个人设置里的时区）。`,
+          "步骤：",
+          "1. 先读取资源 life-ledger://settings 确认时区，再计算该月第一天 00:00 到下月第一天 00:00 的区间。",
+          "2. 调用 get_stats 获取该区间的统计。",
+          "3. 用 get_recent_entries 按同一区间翻页读取记录，重点阅读 mood、thought、idea 与有评分的媒体记录。",
+          "4. 输出：本月数字概览、媒体清单与评分、反复出现的主题、情绪变化、下个月可以尝试的一件事。",
+          `规则：\n- ${REVIEW_RULES}`,
+        ].join("\n"),
+      ),
+  );
 }

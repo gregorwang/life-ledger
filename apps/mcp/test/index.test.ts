@@ -59,6 +59,9 @@ function createCore(
     createExport: failUnexpectedCall,
     listExports: failUnexpectedCall,
     verifyExport: failUnexpectedCall,
+    getStats: failUnexpectedCall,
+    listTags: failUnexpectedCall,
+    getOnThisDay: failUnexpectedCall,
     getSettings: failUnexpectedCall,
     updateSettings: failUnexpectedCall,
     ...overrides,
@@ -106,6 +109,9 @@ const expectedToolNames = [
   "get_entry",
   "search_entries",
   "get_recent_entries",
+  "get_stats",
+  "list_tags",
+  "on_this_day",
   "capture_entry",
   "update_entry",
   "delete_entry",
@@ -233,6 +239,165 @@ describe("Life Ledger MCP 工具契约", () => {
         },
       });
     });
+  });
+
+  it("检索工具把时间范围与标签透传到 Core", async () => {
+    const listEntries = vi.fn(async () => []);
+
+    await withClient(createCore({ listEntries }), async (client) => {
+      await client.callTool({
+        name: "search_entries",
+        arguments: {
+          query: "芙莉莲",
+          occurredFrom: "2026-09-01T00:00:00+09:00",
+          occurredTo: "2026-10-01T00:00:00+09:00",
+          tag: "周末",
+        },
+      });
+      await client.callTool({
+        name: "get_recent_entries",
+        arguments: { type: "mood", occurredFrom: "2026-09-17T00:00:00Z" },
+      });
+    });
+
+    expect(listEntries).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        query: "芙莉莲",
+        occurredFrom: "2026-09-01T00:00:00+09:00",
+        occurredTo: "2026-10-01T00:00:00+09:00",
+        tag: "周末",
+      }),
+    );
+    expect(listEntries).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        query: "",
+        type: "mood",
+        occurredFrom: "2026-09-17T00:00:00Z",
+        occurredTo: null,
+        tag: null,
+      }),
+    );
+  });
+
+  it("统计、标签与那年今日走只读 Core 调用，并校验区间", async () => {
+    const getStats = vi.fn(async () => ({ totalEntries: 3 }) as never);
+    const listTags = vi.fn(async () => [
+      { tag: "动画", count: 4, lastUsedAt: "2026-09-20T00:00:00.000Z" },
+    ]);
+    const getOnThisDay = vi.fn(
+      async () =>
+        ({ date: "2026-09-24", timezone: "Asia/Tokyo", entries: [] }) as never,
+    );
+
+    await withClient(
+      createCore({ getStats, listTags, getOnThisDay }),
+      async (client) => {
+        const stats = await client.callTool({
+          name: "get_stats",
+          arguments: {
+            from: "2026-09-01T00:00:00+09:00",
+            to: "2026-10-01T00:00:00+09:00",
+          },
+        });
+        expect(JSON.parse(responseText(stats))).toEqual({
+          ok: true,
+          data: { totalEntries: 3 },
+        });
+
+        const reversed = await client.callTool({
+          name: "get_stats",
+          arguments: {
+            from: "2026-10-01T00:00:00+09:00",
+            to: "2026-09-01T00:00:00+09:00",
+          },
+        });
+        expect("isError" in reversed && reversed.isError).toBe(true);
+
+        await client.callTool({ name: "list_tags", arguments: {} });
+        await client.callTool({
+          name: "on_this_day",
+          arguments: { date: "2026-09-24" },
+        });
+
+        const tools = await client.listTools();
+        for (const name of ["get_stats", "list_tags", "on_this_day"]) {
+          expect(
+            tools.tools.find((tool) => tool.name === name)?.annotations
+              ?.readOnlyHint,
+          ).toBe(true);
+        }
+      },
+    );
+
+    expect(getStats).toHaveBeenCalledTimes(1);
+    expect(getStats).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "2026-09-01T00:00:00+09:00",
+        timezone: null,
+      }),
+    );
+    expect(listTags).toHaveBeenCalledWith({ limit: 200 });
+    expect(getOnThisDay).toHaveBeenCalledWith(
+      expect.objectContaining({ date: "2026-09-24", limit: 50 }),
+    );
+  });
+
+  it("暴露只读上下文资源与回顾提示词", async () => {
+    const getSettings = vi.fn(async () => ({ timezone: "Asia/Tokyo" }) as never);
+    const getStats = vi.fn(async () => ({ totalEntries: 0 }) as never);
+    const listMediaWorks = vi.fn(async () => []);
+
+    await withClient(
+      createCore({ getSettings, getStats, listMediaWorks }),
+      async (client) => {
+        const resources = await client.listResources();
+        expect(resources.resources.map((resource) => resource.uri)).toEqual([
+          "life-ledger://settings",
+          "life-ledger://tags",
+          "life-ledger://media/in-progress",
+          "life-ledger://digest/last-7-days",
+          "life-ledger://on-this-day",
+        ]);
+
+        const settings = await client.readResource({
+          uri: "life-ledger://settings",
+        });
+        const first = settings.contents[0];
+        expect(first && "text" in first ? JSON.parse(first.text) : null).toEqual({
+          ok: true,
+          data: { timezone: "Asia/Tokyo" },
+        });
+
+        await client.readResource({ uri: "life-ledger://media/in-progress" });
+        expect(listMediaWorks).toHaveBeenCalledWith(
+          expect.objectContaining({ watchStatus: "watching" }),
+        );
+
+        await client.readResource({ uri: "life-ledger://digest/last-7-days" });
+        const range = getStats.mock.calls[0]?.[0] as
+          | { from: string; to: string }
+          | undefined;
+        expect(
+          range ? Date.parse(range.to) - Date.parse(range.from) : 0,
+        ).toBe(7 * 86_400_000);
+
+        const prompts = await client.listPrompts();
+        expect(prompts.prompts.map((prompt) => prompt.name)).toEqual([
+          "weekly_review",
+          "monthly_recap",
+        ]);
+        const recap = await client.getPrompt({
+          name: "monthly_recap",
+          arguments: { month: "2026-08" },
+        });
+        const message = recap.messages[0]?.content;
+        expect(message && "text" in message ? message.text : "").toContain(
+          "2026-08",
+        );
+      },
+    );
   });
 
   it("单次影视日志调用会把电影或电视剧分类透传到 Core", async () => {

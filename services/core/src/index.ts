@@ -13,10 +13,13 @@ import {
   createMediaWorkInputSchema,
   importDryRunInputSchema,
   integerToScore,
+  ledgerStatsInputSchema,
   listEntriesInputSchema,
   listMediaWorksInputSchema,
+  listTagsInputSchema,
   logMediaInputSchema,
   normalizeMediaTitle,
+  onThisDayInputSchema,
   publicAnimeResponseSchema,
   publicTimelineItemSchema,
   publicTimelineResponseSchema,
@@ -38,6 +41,12 @@ import {
   type EntryRevision,
   type EntryStatus,
   type EntrySummary,
+  type LedgerStats,
+  type LedgerStatsInput,
+  type LedgerTag,
+  type ListTagsInput,
+  type OnThisDayInput,
+  type OnThisDayResult,
   type EntryType,
   type EntryVisibility,
   type ExportDownload,
@@ -90,6 +99,14 @@ import {
   uploadMediaImageToR2,
   type MediaUploadEnvironment,
 } from "./media-upload";
+import {
+  aggregateStats,
+  isValidTimeZone,
+  localDateKey,
+  timeZoneOffsetMinutes,
+  type StatsRow,
+} from "./stats";
+
 
 interface Env extends MediaUploadEnvironment {
   DB: D1Database;
@@ -589,6 +606,7 @@ const FULL_EXPORT_TABLES = [
   "media_upload_requests",
 ] as const;
 
+const STATS_ROW_LIMIT = 20_000;
 const EXPORT_PAGE_SIZE = 250;
 const DAILY_SCHEDULE = "20 18 * * *";
 const WEEKLY_SCHEDULE = "0 19 * * 0";
@@ -1475,6 +1493,21 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     if (parsed.scoreMax !== null) {
       conditions.push("ml.score_100 <= ?");
       values.push(scoreToInteger(parsed.scoreMax));
+    }
+    if (parsed.occurredFrom !== null) {
+      conditions.push("e.occurred_at >= ?");
+      values.push(utcIso(parsed.occurredFrom));
+    }
+    if (parsed.occurredTo !== null) {
+      conditions.push("e.occurred_at < ?");
+      values.push(utcIso(parsed.occurredTo));
+    }
+    if (parsed.tag !== null) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM json_each(e.tags_json) AS t
+        WHERE lower(t.value) = ?
+      )`);
+      values.push(parsed.tag.toLocaleLowerCase("zh-CN"));
     }
     if (parsed.cursor !== null) {
       const separator = parsed.cursor.lastIndexOf("|");
@@ -3172,6 +3205,99 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       revision: revisionRow?.value ?? "pub_unknown",
       items,
     });
+  }
+
+  async getStats(input: LedgerStatsInput): Promise<LedgerStats> {
+    const parsed = ledgerStatsInputSchema.parse(input);
+    const timezone = await this.#resolveTimeZone(parsed.timezone);
+    const from = utcIso(parsed.from);
+    const to = utcIso(parsed.to);
+    const result = await this.env.DB.prepare(`
+      SELECT
+        e.id,
+        e.type,
+        e.visibility,
+        e.occurred_at,
+        e.tags_json,
+        mw.id AS media_work_id,
+        mw.canonical_title AS media_title,
+        mw.media_type,
+        ml.rating_scope,
+        ml.score_100
+      FROM entries e
+      LEFT JOIN media_logs ml ON ml.entry_id = e.id
+      LEFT JOIN media_works mw ON mw.id = ml.media_work_id
+      WHERE e.user_id = ? AND e.status = 'active'
+        AND e.occurred_at >= ? AND e.occurred_at < ?
+      ORDER BY e.occurred_at DESC
+      LIMIT ?
+    `)
+      .bind(USER_ID, from, to, STATS_ROW_LIMIT + 1)
+      .all<StatsRow>();
+    const truncated = result.results.length > STATS_ROW_LIMIT;
+    return aggregateStats(result.results.slice(0, STATS_ROW_LIMIT), {
+      from,
+      to,
+      timezone,
+      truncated,
+    });
+  }
+
+  async listTags(input: ListTagsInput = {}): Promise<LedgerTag[]> {
+    const parsed = listTagsInputSchema.parse(input);
+    const result = await this.env.DB.prepare(`
+      SELECT t.value AS tag, count(*) AS count, max(e.occurred_at) AS last_used_at
+      FROM entries e, json_each(e.tags_json) AS t
+      WHERE e.user_id = ? AND e.status = 'active' AND t.type = 'text'
+      GROUP BY t.value
+      ORDER BY count DESC, last_used_at DESC
+      LIMIT ?
+    `)
+      .bind(USER_ID, parsed.limit)
+      .all<{ tag: string; count: number; last_used_at: string }>();
+    return result.results.map((row) => ({
+      tag: row.tag,
+      count: Number(row.count),
+      lastUsedAt: row.last_used_at,
+    }));
+  }
+
+  async getOnThisDay(input: OnThisDayInput = {}): Promise<OnThisDayResult> {
+    const parsed = onThisDayInputSchema.parse(input);
+    const timezone = await this.#resolveTimeZone(parsed.timezone);
+    const date = parsed.date ?? localDateKey(new Date(), timezone);
+    const noon = new Date(`${date}T12:00:00Z`);
+    if (Number.isNaN(noon.getTime()) || noon.toISOString().slice(0, 10) !== date) {
+      throw new LedgerDomainError("INVALID_DATE", `无效日期：${date}`);
+    }
+    const offset = `${timeZoneOffsetMinutes(timezone, noon)} minutes`;
+    const result = await this.env.DB.prepare(`
+      ${ENTRY_SELECT}
+      WHERE e.user_id = ? AND e.status = 'active'
+        AND e.date_precision IN ('exact', 'approximate')
+        AND strftime('%m-%d', e.occurred_at, ?) = ?
+        AND strftime('%Y', e.occurred_at, ?) < ?
+      ORDER BY e.occurred_at DESC, e.id DESC
+      LIMIT ?
+    `)
+      .bind(
+        USER_ID,
+        offset,
+        date.slice(5),
+        offset,
+        date.slice(0, 4),
+        parsed.limit,
+      )
+      .all<EntryRow>();
+    return { date, timezone, entries: result.results.map(toSummary) };
+  }
+
+  async #resolveTimeZone(requested: string | null): Promise<string> {
+    const timezone = requested ?? (await this.getSettings()).timezone;
+    if (!isValidTimeZone(timezone)) {
+      throw new LedgerDomainError("INVALID_TIMEZONE", `无效时区：${timezone}`);
+    }
+    return timezone;
   }
 
   async getSettings(): Promise<LedgerSettings> {
