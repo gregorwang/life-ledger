@@ -30,6 +30,7 @@ import {
   Menu,
   MessageCircleMore,
   MoreHorizontal,
+  Music2,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -109,6 +110,7 @@ import {
   type ToastMessage,
 } from "./models";
 import { GameLibraryPage } from "./GameLibraryPage";
+import { ShelfPage } from "./ShelfPage";
 import {
   EntryAttachments,
   TimelineFeed,
@@ -125,6 +127,8 @@ const ROUTES = {
   anime: "/anime",
   movies: "/movies",
   games: "/games",
+  books: "/books",
+  music: "/music",
   search: "/search",
   imports: "/imports",
   exports: "/exports",
@@ -138,6 +142,8 @@ type AppRoute =
   | { kind: "anime-detail"; id: string }
   | { kind: "movies" }
   | { kind: "games" }
+  | { kind: "books" }
+  | { kind: "music" }
   | { kind: "entry-detail"; id: string }
   | { kind: "search" }
   | { kind: "imports" }
@@ -183,6 +189,18 @@ const NAV_ITEMS = [
     label: "游戏库",
     path: ROUTES.games,
     icon: Gamepad2,
+    section: "main",
+  },
+  {
+    label: "书架",
+    path: ROUTES.books,
+    icon: BookOpen,
+    section: "main",
+  },
+  {
+    label: "音乐",
+    path: ROUTES.music,
+    icon: Music2,
     section: "main",
   },
   {
@@ -260,6 +278,10 @@ function parseRoute(pathname: string): AppRoute {
       return { kind: "movies" };
     case ROUTES.games:
       return { kind: "games" };
+    case ROUTES.books:
+      return { kind: "books" };
+    case ROUTES.music:
+      return { kind: "music" };
     case ROUTES.search:
       return { kind: "search" };
     case ROUTES.imports:
@@ -285,6 +307,10 @@ function getRoutePath(route: AppRoute): string {
       return ROUTES.movies;
     case "games":
       return ROUTES.games;
+    case "books":
+      return ROUTES.books;
+    case "music":
+      return ROUTES.music;
     case "anime-detail":
       return `/anime/${encodeURIComponent(route.id)}`;
     case "entry-detail":
@@ -952,6 +978,16 @@ function renderRoute(props: RenderRouteProps): ReactNode {
       );
     case "games":
       return <GameLibraryPage />;
+    case "books":
+    case "music":
+      return (
+        <ShelfPage
+          key={props.route.kind}
+          kind={props.route.kind === "books" ? "book" : "music"}
+          onCreatePost={props.onCreatePost}
+          pushToast={props.pushToast}
+        />
+      );
     case "anime-detail":
       return (
         <AnimeDetailPage

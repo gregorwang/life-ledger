@@ -15,6 +15,9 @@ import {
   logMediaInputSchema,
   settingsSchema,
   profileSchema,
+  createShelfItemInputSchema,
+  listShelfItemsInputSchema,
+  updateShelfItemInputSchema,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
   type CoreBinding,
@@ -1160,6 +1163,55 @@ app.post("/api/v1/game-library/:id/restore", async (context) => {
       context.req.param("id"),
       versionNo,
     ),
+  );
+});
+
+function bodyVersionNo(body: unknown): number {
+  return typeof body === "object" &&
+    body !== null &&
+    "versionNo" in body &&
+    typeof body.versionNo === "number"
+    ? body.versionNo
+    : 0;
+}
+
+app.get("/api/v1/shelf", async (context) => {
+  const input = listShelfItemsInputSchema.parse({
+    kind: context.req.query("kind") ?? null,
+    query: context.req.query("query") ?? "",
+  });
+  return context.json({ items: await context.env.CORE.listShelfItems(input) });
+});
+
+app.post("/api/v1/shelf", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.createShelfItem(createShelfItemInputSchema.parse(body)),
+    201,
+  );
+});
+
+app.patch("/api/v1/shelf/:id", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.updateShelfItem(
+      context.req.param("id"),
+      updateShelfItemInputSchema.parse(body),
+    ),
+  );
+});
+
+app.delete("/api/v1/shelf/:id", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.deleteShelfItem(context.req.param("id"), bodyVersionNo(body)),
+  );
+});
+
+app.post("/api/v1/shelf/:id/restore", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.restoreShelfItem(context.req.param("id"), bodyVersionNo(body)),
   );
 });
 

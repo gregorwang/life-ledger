@@ -47,6 +47,12 @@ function createCore(
     updateGameLibraryItem: failUnexpectedCall,
     deleteGameLibraryItem: failUnexpectedCall,
     restoreGameLibraryItem: failUnexpectedCall,
+    listShelfItems: failUnexpectedCall,
+    createShelfItem: failUnexpectedCall,
+    updateShelfItem: failUnexpectedCall,
+    addShelfExcerpt: failUnexpectedCall,
+    deleteShelfItem: failUnexpectedCall,
+    restoreShelfItem: failUnexpectedCall,
     listSeasons: failUnexpectedCall,
     createSeason: failUnexpectedCall,
     updateSeason: failUnexpectedCall,
@@ -130,6 +136,12 @@ const expectedToolNames = [
   "update_game_library_item",
   "delete_game_library_item",
   "restore_game_library_item",
+  "list_shelf_items",
+  "create_shelf_item",
+  "update_shelf_item",
+  "add_shelf_excerpt",
+  "delete_shelf_item",
+  "restore_shelf_item",
   "create_media_work",
   "update_media_work",
   "upload_media_image",
@@ -254,6 +266,56 @@ describe("Life Ledger MCP 工具契约", () => {
           code: "CORE_WRITE_REJECTED",
           message: "CORE_WRITE_REJECTED: 写入被拒绝。",
           retryable: false,
+        },
+      });
+    });
+  });
+
+  it("书架工具把书和摘抄交给 Core，并拒绝不属于该类型的格式", async () => {
+    const createShelfItem = vi.fn(async (input: unknown) => ({ id: "book_1", ...(input as object) }) as never);
+    const addShelfExcerpt = vi.fn(async () => ({ id: "book_1" }) as never);
+    await withClient(createCore({ createShelfItem, addShelfExcerpt }), async (client) => {
+      await client.callTool({
+        name: "create_shelf_item",
+        arguments: {
+          kind: "book",
+          title: "三体",
+          creator: "刘慈欣",
+          format: "paper",
+          rating: 9.5,
+          finishedOn: "2026-09-01",
+        },
+      });
+      expect(createShelfItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "book",
+          title: "三体",
+          shelfStatus: "done",
+          excerpts: [],
+        }),
+      );
+
+      const rejected = await client.callTool({
+        name: "create_shelf_item",
+        arguments: { kind: "music", title: "晴天", format: "paper" },
+      });
+      expect("isError" in rejected && rejected.isError).toBe(true);
+      expect(createShelfItem).toHaveBeenCalledOnce();
+
+      await client.callTool({
+        name: "add_shelf_excerpt",
+        arguments: {
+          shelfItemId: "book_1",
+          versionNo: 2,
+          excerpt: { text: "弱小和无知不是生存的障碍，傲慢才是。", location: "p.120" },
+        },
+      });
+      expect(addShelfExcerpt).toHaveBeenCalledWith("book_1", {
+        versionNo: 2,
+        excerpt: {
+          text: "弱小和无知不是生存的障碍，傲慢才是。",
+          location: "p.120",
+          note: null,
         },
       });
     });

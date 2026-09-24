@@ -36,7 +36,19 @@ import {
   settingsSchema,
   profileSchema,
   withMoodTag,
+  addShelfExcerptInputSchema,
+  createShelfItemInputSchema,
+  listShelfItemsInputSchema,
+  shelfExcerptSchema,
+  shelfFormatMatchesKind,
+  updateShelfItemInputSchema,
+  type AddShelfExcerptInput,
+  type CreateShelfItemInput,
   type LedgerProfile,
+  type ListShelfItemsInput,
+  type ShelfExcerpt,
+  type ShelfItem,
+  type UpdateShelfItemInput,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
   updateMediaSeasonInputSchema,
@@ -288,6 +300,29 @@ interface GameLibraryRow {
   cover_url: string;
   source_url: string;
   status: GameLibraryItem["status"];
+  version_no: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface ShelfItemRow {
+  id: string;
+  kind: ShelfItem["kind"];
+  title: string;
+  creator: string | null;
+  format: ShelfItem["format"];
+  shelf_status: ShelfItem["shelfStatus"];
+  rating: number | null;
+  progress: number | null;
+  review: string;
+  excerpts_json: string;
+  tags_json: string;
+  cover_url: string | null;
+  source_url: string | null;
+  started_on: string | null;
+  finished_on: string | null;
+  status: ShelfItem["status"];
   version_no: number;
   created_at: string;
   updated_at: string;
@@ -661,6 +696,44 @@ function toGameLibraryItem(row: GameLibraryRow): GameLibraryItem {
   };
 }
 
+function safeExcerpts(value: string): ShelfExcerpt[] {
+  return safeRecordArray(value).flatMap((item) => {
+    const parsed = shelfExcerptSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function toShelfItem(row: ShelfItemRow): ShelfItem {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    creator: row.creator,
+    format: row.format,
+    shelfStatus: row.shelf_status,
+    rating: row.rating === null ? null : Number(row.rating),
+    progress: row.progress === null ? null : Number(row.progress),
+    review: row.review,
+    excerpts: safeExcerpts(row.excerpts_json),
+    tags: safeStringArray(row.tags_json),
+    coverUrl: row.cover_url,
+    sourceUrl: row.source_url,
+    startedOn: row.started_on,
+    finishedOn: row.finished_on,
+    status: row.status,
+    versionNo: Number(row.version_no),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+const SHELF_COLUMNS = `
+  id, kind, title, creator, format, shelf_status, rating, progress, review,
+  excerpts_json, tags_json, cover_url, source_url, started_on, finished_on,
+  status, version_no, created_at, updated_at, deleted_at
+`;
+
 const ENTRY_SELECT = `
   SELECT
     e.id,
@@ -708,6 +781,8 @@ const FULL_EXPORT_TABLES = [
   "media_upload_requests",
   "entry_media",
   "entry_follow_ups",
+  "game_library_items",
+  "shelf_items",
 ] as const;
 
 const STATS_ROW_LIMIT = 20_000;
@@ -939,6 +1014,21 @@ async function collectIncrementalExport(
       ),
     },
   ];
+  for (const name of ["game_library_items", "shelf_items"] as const) {
+    tables.push({
+      name,
+      rows: await readPagedRows(
+        database,
+        `
+          SELECT *
+          FROM ${name}
+          WHERE user_id = ? AND updated_at > ? AND updated_at <= ?
+          ORDER BY updated_at, id
+        `,
+        [USER_ID, start, cutoff],
+      ),
+    });
+  }
   return { tables, schema: [] };
 }
 
@@ -1591,6 +1681,276 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     throw new LedgerDomainError(
       "INVALID_GAME_LIBRARY_STATE",
       `Cannot ${action} a ${current.status} game library item.`,
+      409,
+    );
+  }
+
+  async listShelfItems(input: ListShelfItemsInput): Promise<ShelfItem[]> {
+    const parsed = listShelfItemsInputSchema.parse(input);
+    const clauses = ["user_id = ?", "status = 'active'"];
+    const values: unknown[] = [USER_ID];
+    if (parsed.kind) {
+      clauses.push("kind = ?");
+      values.push(parsed.kind);
+    }
+    if (parsed.shelfStatus) {
+      clauses.push("shelf_status = ?");
+      values.push(parsed.shelfStatus);
+    }
+    if (parsed.query) {
+      const like = `%${parsed.query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+      clauses.push(
+        "(title LIKE ? ESCAPE '\\' OR creator LIKE ? ESCAPE '\\' OR tags_json LIKE ? ESCAPE '\\')",
+      );
+      values.push(like, like, like);
+    }
+    const result = await this.env.DB.prepare(`
+      SELECT ${SHELF_COLUMNS}
+      FROM shelf_items
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY coalesce(finished_on, started_on, substr(created_at, 1, 10)) DESC, updated_at DESC
+      LIMIT ?
+    `)
+      .bind(...values, parsed.limit)
+      .all<ShelfItemRow>();
+    return result.results.map(toShelfItem);
+  }
+
+  async createShelfItem(input: CreateShelfItemInput): Promise<ShelfItem> {
+    const parsed = createShelfItemInputSchema.parse(input);
+    const id = createId(parsed.kind === "book" ? "book" : "music");
+    const timestamp = nowIso();
+    await this.env.DB.prepare(`
+      INSERT INTO shelf_items (
+        id, user_id, kind, title, creator, format, shelf_status, rating,
+        progress, review, excerpts_json, tags_json, cover_url, source_url,
+        started_on, finished_on, status, version_no, created_at, updated_at,
+        deleted_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, 'active', 1, ?, ?,
+        NULL
+      )
+    `)
+      .bind(
+        id,
+        USER_ID,
+        parsed.kind,
+        parsed.title,
+        parsed.creator,
+        parsed.format,
+        parsed.shelfStatus,
+        parsed.rating,
+        parsed.progress,
+        parsed.review,
+        JSON.stringify(parsed.excerpts),
+        JSON.stringify(parsed.tags),
+        parsed.coverUrl,
+        parsed.sourceUrl,
+        parsed.startedOn,
+        parsed.finishedOn,
+        timestamp,
+        timestamp,
+      )
+      .run();
+    return this.#requireShelfItem(id);
+  }
+
+  async updateShelfItem(
+    id: string,
+    input: UpdateShelfItemInput,
+  ): Promise<ShelfItem> {
+    const parsed = updateShelfItemInputSchema.parse(input);
+    const current = await this.#requireEditableShelfItem(id, parsed.versionNo);
+    const next = {
+      title: parsed.title ?? current.title,
+      creator: parsed.creator !== undefined ? parsed.creator : current.creator,
+      format: parsed.format !== undefined ? parsed.format : current.format,
+      shelfStatus: parsed.shelfStatus ?? current.shelfStatus,
+      rating: parsed.rating !== undefined ? parsed.rating : current.rating,
+      progress: parsed.progress !== undefined ? parsed.progress : current.progress,
+      review: parsed.review ?? current.review,
+      excerpts: parsed.excerpts ?? current.excerpts,
+      tags: parsed.tags ?? current.tags,
+      coverUrl: parsed.coverUrl !== undefined ? parsed.coverUrl : current.coverUrl,
+      sourceUrl: parsed.sourceUrl !== undefined ? parsed.sourceUrl : current.sourceUrl,
+      startedOn: parsed.startedOn !== undefined ? parsed.startedOn : current.startedOn,
+      finishedOn: parsed.finishedOn !== undefined ? parsed.finishedOn : current.finishedOn,
+    };
+    if (!shelfFormatMatchesKind(current.kind, next.format)) {
+      throw new LedgerDomainError(
+        "INVALID_SHELF_FORMAT",
+        `Format ${next.format} does not fit a ${current.kind} item.`,
+      );
+    }
+    if (next.startedOn && next.finishedOn && next.finishedOn < next.startedOn) {
+      throw new LedgerDomainError(
+        "INVALID_SHELF_DATES",
+        "finishedOn cannot be earlier than startedOn.",
+      );
+    }
+    await this.#writeShelfItem(id, parsed.versionNo, next);
+    return this.#requireShelfItem(id);
+  }
+
+  async addShelfExcerpt(
+    id: string,
+    input: AddShelfExcerptInput,
+  ): Promise<ShelfItem> {
+    const parsed = addShelfExcerptInputSchema.parse(input);
+    const current = await this.#requireEditableShelfItem(id, parsed.versionNo);
+    if (current.excerpts.length >= 500) {
+      throw new LedgerDomainError(
+        "SHELF_EXCERPT_LIMIT",
+        "An item can hold at most 500 excerpts.",
+        409,
+      );
+    }
+    await this.#writeShelfItem(id, parsed.versionNo, {
+      ...current,
+      excerpts: [...current.excerpts, parsed.excerpt],
+    });
+    return this.#requireShelfItem(id);
+  }
+
+  async deleteShelfItem(id: string, versionNo: number): Promise<ShelfItem> {
+    const timestamp = nowIso();
+    const result = await this.env.DB.prepare(`
+      UPDATE shelf_items
+      SET status = 'deleted', deleted_at = ?, updated_at = ?, version_no = version_no + 1
+      WHERE id = ? AND user_id = ? AND status = 'active' AND version_no = ?
+    `)
+      .bind(timestamp, timestamp, id, USER_ID, versionNo)
+      .run();
+    if (result.meta.changes !== 1) {
+      await this.#throwShelfMutationConflict(id, versionNo, "delete");
+    }
+    return this.#requireShelfItem(id);
+  }
+
+  async restoreShelfItem(id: string, versionNo: number): Promise<ShelfItem> {
+    const result = await this.env.DB.prepare(`
+      UPDATE shelf_items
+      SET status = 'active', deleted_at = NULL, updated_at = ?, version_no = version_no + 1
+      WHERE id = ? AND user_id = ? AND status = 'deleted' AND version_no = ?
+    `)
+      .bind(nowIso(), id, USER_ID, versionNo)
+      .run();
+    if (result.meta.changes !== 1) {
+      await this.#throwShelfMutationConflict(id, versionNo, "restore");
+    }
+    return this.#requireShelfItem(id);
+  }
+
+  async #writeShelfItem(
+    id: string,
+    versionNo: number,
+    next: Pick<
+      ShelfItem,
+      | "title"
+      | "creator"
+      | "format"
+      | "shelfStatus"
+      | "rating"
+      | "progress"
+      | "review"
+      | "excerpts"
+      | "tags"
+      | "coverUrl"
+      | "sourceUrl"
+      | "startedOn"
+      | "finishedOn"
+    >,
+  ): Promise<void> {
+    const result = await this.env.DB.prepare(`
+      UPDATE shelf_items
+      SET
+        title = ?, creator = ?, format = ?, shelf_status = ?, rating = ?,
+        progress = ?, review = ?, excerpts_json = ?, tags_json = ?,
+        cover_url = ?, source_url = ?, started_on = ?, finished_on = ?,
+        version_no = version_no + 1, updated_at = ?
+      WHERE id = ? AND user_id = ? AND status = 'active' AND version_no = ?
+    `)
+      .bind(
+        next.title,
+        next.creator,
+        next.format,
+        next.shelfStatus,
+        next.rating,
+        next.progress,
+        next.review,
+        JSON.stringify(next.excerpts),
+        JSON.stringify(next.tags),
+        next.coverUrl,
+        next.sourceUrl,
+        next.startedOn,
+        next.finishedOn,
+        nowIso(),
+        id,
+        USER_ID,
+        versionNo,
+      )
+      .run();
+    if (result.meta.changes !== 1) {
+      throw new LedgerDomainError(
+        "VERSION_CONFLICT",
+        "This item changed elsewhere; reload it before editing.",
+        409,
+      );
+    }
+  }
+
+  async #requireEditableShelfItem(id: string, versionNo: number): Promise<ShelfItem> {
+    const current = await this.#requireShelfItem(id);
+    if (current.status !== "active") {
+      throw new LedgerDomainError(
+        "SHELF_ITEM_DELETED",
+        "Restore the item before editing it.",
+        409,
+      );
+    }
+    if (current.versionNo !== versionNo) {
+      throw new LedgerDomainError(
+        "VERSION_CONFLICT",
+        "This item changed elsewhere; reload it before editing.",
+        409,
+      );
+    }
+    return current;
+  }
+
+  async #requireShelfItem(id: string): Promise<ShelfItem> {
+    const row = await this.env.DB.prepare(`
+      SELECT ${SHELF_COLUMNS}
+      FROM shelf_items
+      WHERE id = ? AND user_id = ?
+      LIMIT 1
+    `)
+      .bind(id, USER_ID)
+      .first<ShelfItemRow>();
+    if (!row) {
+      throw new LedgerDomainError("SHELF_ITEM_NOT_FOUND", "Shelf item not found.", 404);
+    }
+    return toShelfItem(row);
+  }
+
+  async #throwShelfMutationConflict(
+    id: string,
+    versionNo: number,
+    action: "delete" | "restore",
+  ): Promise<never> {
+    const current = await this.#requireShelfItem(id);
+    if (current.versionNo !== versionNo) {
+      throw new LedgerDomainError(
+        "VERSION_CONFLICT",
+        "This item changed elsewhere; reload it before editing.",
+        409,
+      );
+    }
+    throw new LedgerDomainError(
+      "INVALID_SHELF_STATE",
+      `Cannot ${action} a ${current.status} shelf item.`,
       409,
     );
   }

@@ -541,6 +541,150 @@ export const onThisDayInputSchema = z.object({
   limit: z.number().int().min(1).max(100).default(50),
 });
 
+export const shelfKindSchema = z.enum(["book", "music"]);
+export const shelfStatusSchema = z.enum(["planned", "in_progress", "done", "dropped"]);
+export const shelfFormatSchema = z.enum([
+  "paper",
+  "ebook",
+  "audiobook",
+  "album",
+  "track",
+  "playlist",
+]);
+
+export const SHELF_FORMATS = {
+  book: ["paper", "ebook", "audiobook"],
+  music: ["album", "track", "playlist"],
+} as const satisfies Record<
+  z.infer<typeof shelfKindSchema>,
+  readonly z.infer<typeof shelfFormatSchema>[]
+>;
+
+export const shelfExcerptSchema = z
+  .object({
+    text: z.string().trim().min(1).max(5_000),
+    location: z.string().trim().min(1).max(80).nullable().default(null),
+    note: z.string().trim().min(1).max(2_000).nullable().default(null),
+  })
+  .strict();
+
+/** Covers are either uploaded private media, public media or plain HTTPS. */
+const shelfCoverUrlSchema = z
+  .string()
+  .trim()
+  .max(2_000)
+  .regex(
+    /^(?:https:\/\/[^\s"'<>]+|\/(?:media|public-media|assets)\/[A-Za-z0-9._\/-]+)$/u,
+    "封面必须是 https 地址或本站上传的图片。",
+  );
+
+const shelfSourceUrlSchema = z
+  .string()
+  .trim()
+  .max(2_000)
+  .regex(/^https:\/\/[^\s"'<>]+$/u, "来源链接必须是 https 地址。");
+
+const shelfItemFields = {
+  title: z.string().trim().min(1).max(300),
+  creator: z.string().trim().min(1).max(300).nullable(),
+  format: shelfFormatSchema.nullable(),
+  shelfStatus: shelfStatusSchema,
+  rating: z.number().min(0).max(10).multipleOf(0.1).nullable(),
+  progress: z.number().int().min(0).max(100).nullable(),
+  review: z.string().trim().max(50_000),
+  excerpts: z.array(shelfExcerptSchema).max(500),
+  tags: z.array(z.string().trim().min(1).max(80)).max(30),
+  coverUrl: shelfCoverUrlSchema.nullable(),
+  sourceUrl: shelfSourceUrlSchema.nullable(),
+  startedOn: localDateSchema.nullable(),
+  finishedOn: localDateSchema.nullable(),
+};
+
+function checkShelfDates(
+  value: { startedOn?: string | null; finishedOn?: string | null },
+  context: z.RefinementCtx,
+) {
+  if (value.startedOn && value.finishedOn && value.finishedOn < value.startedOn) {
+    context.addIssue({
+      code: "custom",
+      path: ["finishedOn"],
+      message: "finishedOn cannot be earlier than startedOn.",
+    });
+  }
+}
+
+export function shelfFormatMatchesKind(
+  kind: z.infer<typeof shelfKindSchema>,
+  format: z.infer<typeof shelfFormatSchema> | null,
+): boolean {
+  return format === null || (SHELF_FORMATS[kind] as readonly string[]).includes(format);
+}
+
+export const createShelfItemInputSchema = z
+  .object({
+    kind: shelfKindSchema,
+    title: shelfItemFields.title,
+    creator: shelfItemFields.creator.default(null),
+    format: shelfItemFields.format.default(null),
+    shelfStatus: shelfItemFields.shelfStatus.default("done"),
+    rating: shelfItemFields.rating.default(null),
+    progress: shelfItemFields.progress.default(null),
+    review: shelfItemFields.review.default(""),
+    excerpts: shelfItemFields.excerpts.default([]),
+    tags: shelfItemFields.tags.default([]),
+    coverUrl: shelfItemFields.coverUrl.default(null),
+    sourceUrl: shelfItemFields.sourceUrl.default(null),
+    startedOn: shelfItemFields.startedOn.default(null),
+    finishedOn: shelfItemFields.finishedOn.default(null),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!shelfFormatMatchesKind(value.kind, value.format)) {
+      context.addIssue({
+        code: "custom",
+        path: ["format"],
+        message: `format must be one of ${SHELF_FORMATS[value.kind].join(", ")} for ${value.kind}.`,
+      });
+    }
+    checkShelfDates(value, context);
+  });
+
+export const updateShelfItemInputSchema = z
+  .object({
+    versionNo: z.number().int().positive(),
+    title: shelfItemFields.title.optional(),
+    creator: shelfItemFields.creator.optional(),
+    format: shelfItemFields.format.optional(),
+    shelfStatus: shelfItemFields.shelfStatus.optional(),
+    rating: shelfItemFields.rating.optional(),
+    progress: shelfItemFields.progress.optional(),
+    review: shelfItemFields.review.optional(),
+    excerpts: shelfItemFields.excerpts.optional(),
+    tags: shelfItemFields.tags.optional(),
+    coverUrl: shelfItemFields.coverUrl.optional(),
+    sourceUrl: shelfItemFields.sourceUrl.optional(),
+    startedOn: shelfItemFields.startedOn.optional(),
+    finishedOn: shelfItemFields.finishedOn.optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).some((key) => key !== "versionNo"), {
+    message: "At least one shelf field must be provided.",
+  });
+
+export const listShelfItemsInputSchema = z.object({
+  kind: shelfKindSchema.nullable().default(null),
+  shelfStatus: shelfStatusSchema.nullable().default(null),
+  query: z.string().trim().max(300).default(""),
+  limit: z.number().int().min(1).max(1_000).default(500),
+});
+
+export const addShelfExcerptInputSchema = z
+  .object({
+    versionNo: z.number().int().positive(),
+    excerpt: shelfExcerptSchema,
+  })
+  .strict();
+
 export const updateEntryInputSchema = z.object({
   versionNo: z.number().int().positive(),
   bodyRaw: z.string().trim().min(1).max(50_000).optional(),
@@ -683,6 +827,14 @@ export type CreateEntryMediaUploadInput = z.infer<
 export type ConfirmActionInput = z.infer<typeof confirmActionInputSchema>;
 export type LedgerSettings = z.infer<typeof settingsSchema>;
 export type LedgerProfile = z.infer<typeof profileSchema>;
+export type ShelfKind = z.infer<typeof shelfKindSchema>;
+export type ShelfStatus = z.infer<typeof shelfStatusSchema>;
+export type ShelfFormat = z.infer<typeof shelfFormatSchema>;
+export type ShelfExcerpt = z.infer<typeof shelfExcerptSchema>;
+export type CreateShelfItemInput = z.input<typeof createShelfItemInputSchema>;
+export type UpdateShelfItemInput = z.infer<typeof updateShelfItemInputSchema>;
+export type ListShelfItemsInput = z.input<typeof listShelfItemsInputSchema>;
+export type AddShelfExcerptInput = z.input<typeof addShelfExcerptInputSchema>;
 export type LedgerStatsInput = z.input<typeof ledgerStatsInputSchema>;
 export type ListTagsInput = z.input<typeof listTagsInputSchema>;
 export type OnThisDayInput = z.input<typeof onThisDayInputSchema>;
@@ -952,6 +1104,29 @@ export interface GameLibraryItem {
   deletedAt: string | null;
 }
 
+export interface ShelfItem {
+  id: string;
+  kind: ShelfKind;
+  title: string;
+  creator: string | null;
+  format: ShelfFormat | null;
+  shelfStatus: ShelfStatus;
+  rating: number | null;
+  progress: number | null;
+  review: string;
+  excerpts: ShelfExcerpt[];
+  tags: string[];
+  coverUrl: string | null;
+  sourceUrl: string | null;
+  startedOn: string | null;
+  finishedOn: string | null;
+  status: "active" | "deleted";
+  versionNo: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
 export interface MediaImageUploadResult {
   objectKey: string;
   publicUrl: string;
@@ -1153,6 +1328,12 @@ export interface CoreBinding {
   getSettings(): Promise<LedgerSettings>;
   updateSettings(settings: LedgerSettings): Promise<LedgerSettings>;
   getProfile(): Promise<LedgerProfile>;
+  listShelfItems(input: ListShelfItemsInput): Promise<ShelfItem[]>;
+  createShelfItem(input: CreateShelfItemInput): Promise<ShelfItem>;
+  updateShelfItem(id: string, input: UpdateShelfItemInput): Promise<ShelfItem>;
+  addShelfExcerpt(id: string, input: AddShelfExcerptInput): Promise<ShelfItem>;
+  deleteShelfItem(id: string, versionNo: number): Promise<ShelfItem>;
+  restoreShelfItem(id: string, versionNo: number): Promise<ShelfItem>;
   updateProfile(profile: LedgerProfile): Promise<LedgerProfile>;
   createImportDryRun(input: ImportDryRunInput): Promise<ImportDryRunReport>;
   commitImport(batchId: string): Promise<ImportDryRunReport>;

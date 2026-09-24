@@ -9,6 +9,8 @@ import type {
   GameLibraryItem,
   ImportDryRunReport,
   LedgerProfile,
+  ShelfItem,
+  ShelfKind,
   MediaWorkDetail,
   MediaWorkSummary,
   MutationResult,
@@ -275,6 +277,52 @@ export async function loadGameLibrary(
     signal ? { signal } : undefined,
   );
   return response.items;
+}
+
+export async function loadShelf(
+  kind: ShelfKind,
+  signal?: AbortSignal,
+): Promise<ShelfItem[]> {
+  const response = await requestJson<{ items: ShelfItem[] }>(
+    `/api/v1/shelf?kind=${kind}`,
+    signal ? { signal } : undefined,
+  );
+  return response.items;
+}
+
+export async function createShelfItem(input: object): Promise<ShelfItem> {
+  return requestJson<ShelfItem>("/api/v1/shelf", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateShelfItem(
+  item: Pick<ShelfItem, "id" | "versionNo">,
+  patch: object,
+): Promise<ShelfItem> {
+  return requestJson<ShelfItem>(`/api/v1/shelf/${encodeURIComponent(item.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...patch, versionNo: item.versionNo }),
+  });
+}
+
+export async function deleteShelfItem(
+  item: Pick<ShelfItem, "id" | "versionNo">,
+): Promise<ShelfItem> {
+  return requestJson<ShelfItem>(`/api/v1/shelf/${encodeURIComponent(item.id)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ versionNo: item.versionNo }),
+  });
+}
+
+export async function restoreShelfItem(
+  item: Pick<ShelfItem, "id" | "versionNo">,
+): Promise<ShelfItem> {
+  return requestJson<ShelfItem>(
+    `/api/v1/shelf/${encodeURIComponent(item.id)}/restore`,
+    { method: "POST", body: JSON.stringify({ versionNo: item.versionNo }) },
+  );
 }
 
 export async function loadEntry(id: string): Promise<LedgerEntry> {

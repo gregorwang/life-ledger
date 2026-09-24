@@ -24,6 +24,10 @@ import {
   uploadMediaImageInputSchema,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
+  addShelfExcerptInputSchema,
+  createShelfItemInputSchema,
+  listShelfItemsInputSchema,
+  updateShelfItemInputSchema,
   updateMediaSeasonInputSchema,
   updateMediaWorkInputSchema,
   type CoreBinding,
@@ -49,6 +53,12 @@ export type McpCoreBinding = Pick<
   | "updateGameLibraryItem"
   | "deleteGameLibraryItem"
   | "restoreGameLibraryItem"
+  | "listShelfItems"
+  | "createShelfItem"
+  | "updateShelfItem"
+  | "addShelfExcerpt"
+  | "deleteShelfItem"
+  | "restoreShelfItem"
   | "listSeasons"
   | "createSeason"
   | "updateSeason"
@@ -252,6 +262,23 @@ const updateGameLibraryItemToolSchema = updateGameLibraryItemInputSchema.safeExt
 });
 
 const mutateGameLibraryItemToolSchema = gameLibraryItemIdSchema.extend({
+  versionNo: z.number().int().positive(),
+  confirm: z.literal(true),
+});
+
+const shelfItemIdSchema = z.object({
+  shelfItemId: idSchema.describe("书架/音乐条目 id（book_… 或 music_…）"),
+});
+
+const updateShelfItemToolSchema = updateShelfItemInputSchema.safeExtend(
+  shelfItemIdSchema.shape,
+);
+
+const addShelfExcerptToolSchema = addShelfExcerptInputSchema.safeExtend(
+  shelfItemIdSchema.shape,
+);
+
+const mutateShelfItemToolSchema = shelfItemIdSchema.extend({
   versionNo: z.number().int().positive(),
   confirm: z.literal(true),
 });
@@ -740,6 +767,90 @@ export function createServer(core: McpCoreBinding): McpServer {
       toolResult(() =>
         core.restoreGameLibraryItem(gameLibraryItemId, versionNo),
       ),
+  );
+
+  server.registerTool(
+    "list_shelf_items",
+    {
+      title: "读取书架与音乐",
+      description:
+        "读取读过/在读/想读的书（kind=book）和听过的专辑、单曲、歌单（kind=music）。可按 shelfStatus（planned 想读想听、in_progress 在读在循环、done 读完听过、dropped 弃了）和关键词筛选；写入前先查，避免重复创建。",
+      inputSchema: listShelfItemsInputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) => toolResult(() => core.listShelfItems(listShelfItemsInputSchema.parse(input))),
+  );
+
+  server.registerTool(
+    "create_shelf_item",
+    {
+      title: "添加一本书或一张专辑/一首歌",
+      description:
+        "在书架（kind=book，format 可选 paper/ebook/audiobook）或音乐（kind=music，format 可选 album/track/playlist）里新建条目。creator 填作者或歌手；rating 0–10；review 是评价原文；excerpts 是摘抄或喜欢的歌词；日期用 YYYY-MM-DD。封面可用 upload_media_image 返回的 publicUrl。",
+      inputSchema: createShelfItemInputSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(() => core.createShelfItem(createShelfItemInputSchema.parse(input))),
+  );
+
+  server.registerTool(
+    "update_shelf_item",
+    {
+      title: "更新书架/音乐条目",
+      description:
+        "用 versionNo 乐观锁更新书或音乐条目，例如读完后把 shelfStatus 改成 done、补 finishedOn 和评分。excerpts 会整体替换；只想追加一条摘抄请用 add_shelf_excerpt。",
+      inputSchema: updateShelfItemToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ shelfItemId, ...input }) =>
+      toolResult(() =>
+        core.updateShelfItem(shelfItemId, updateShelfItemInputSchema.parse(input)),
+      ),
+  );
+
+  server.registerTool(
+    "add_shelf_excerpt",
+    {
+      title: "追加一条摘抄或歌词",
+      description:
+        "给书追加一条摘抄，或给音乐追加一句喜欢的歌词；location 可写页码、章节或曲目，note 写当时的想法。需要当前 versionNo。",
+      inputSchema: addShelfExcerptToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ shelfItemId, ...input }) =>
+      toolResult(() =>
+        core.addShelfExcerpt(shelfItemId, addShelfExcerptInputSchema.parse(input)),
+      ),
+  );
+
+  server.registerTool(
+    "delete_shelf_item",
+    {
+      title: "将书架/音乐条目移入回收站",
+      description: "软删除书或音乐条目，可恢复；必须提供当前 versionNo 并显式确认。",
+      inputSchema: mutateShelfItemToolSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ shelfItemId, versionNo }) =>
+      toolResult(() => core.deleteShelfItem(shelfItemId, versionNo)),
+  );
+
+  server.registerTool(
+    "restore_shelf_item",
+    {
+      title: "恢复书架/音乐条目",
+      description: "从回收站恢复书或音乐条目；必须提供当前 versionNo 并显式确认。",
+      inputSchema: mutateShelfItemToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ shelfItemId, versionNo }) =>
+      toolResult(() => core.restoreShelfItem(shelfItemId, versionNo)),
   );
 
   server.registerTool(

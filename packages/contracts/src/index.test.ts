@@ -11,6 +11,8 @@ import {
   moodFromTags,
   normalizeMediaTitle,
   profileSchema,
+  createShelfItemInputSchema,
+  updateShelfItemInputSchema,
   publicTimelineResponseSchema,
   registerEntryMediaInputSchema,
   scoreToInteger,
@@ -299,5 +301,34 @@ describe("Life Ledger contracts", () => {
     ]) {
       expect(() => profileSchema.parse({ coverUrl: url })).toThrow();
     }
+  });
+
+  it("validates shelf items per kind", () => {
+    const book = createShelfItemInputSchema.parse({ kind: "book", title: "百年孤独" });
+    expect(book).toMatchObject({ shelfStatus: "done", format: null, excerpts: [], rating: null });
+    expect(() =>
+      createShelfItemInputSchema.parse({ kind: "music", title: "晴天", format: "ebook" }),
+    ).toThrow();
+    expect(() =>
+      createShelfItemInputSchema.parse({
+        kind: "book",
+        title: "x",
+        startedOn: "2026-09-10",
+        finishedOn: "2026-09-01",
+      }),
+    ).toThrow();
+    for (const coverUrl of ["javascript:alert(1)", "http://example.com/a.jpg", "//evil/x.png"]) {
+      expect(() =>
+        createShelfItemInputSchema.parse({ kind: "book", title: "x", coverUrl }),
+      ).toThrow();
+    }
+    expect(
+      createShelfItemInputSchema.parse({
+        kind: "music",
+        title: "x",
+        coverUrl: "/media/entry-media/0f8fad5b-d9cb-469f-a165-70867728950e.webp",
+      }).coverUrl,
+    ).toContain("/media/");
+    expect(() => updateShelfItemInputSchema.parse({ versionNo: 1 })).toThrow();
   });
 });
