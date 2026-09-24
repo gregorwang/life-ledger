@@ -59,6 +59,86 @@ export const uploadMediaImageInputSchema = z
   })
   .strict();
 
+export const entryMediaKindSchema = z.enum(["image", "video"]);
+export const entryImageMimeTypeSchema = z.enum([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+export const entryVideoMimeTypeSchema = z.enum([
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+]);
+export const entryMediaMimeTypeSchema = z.enum([
+  ...entryImageMimeTypeSchema.options,
+  ...entryVideoMimeTypeSchema.options,
+]);
+
+export const ENTRY_MEDIA_LIMITS = {
+  maxPerEntry: 9,
+  maxImageBytes: 20 * 1024 * 1024,
+  maxVideoBytes: 95 * 1024 * 1024,
+} as const;
+
+export const ENTRY_MEDIA_EXTENSIONS = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+} as const satisfies Record<z.infer<typeof entryMediaMimeTypeSchema>, string>;
+
+export const ENTRY_MEDIA_OBJECT_KEY_PATTERN =
+  /^entry-media\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(?:jpg|png|webp|gif|mp4|mov|webm)$/;
+
+export const registerEntryMediaInputSchema = z
+  .object({
+    objectKey: z.string().regex(ENTRY_MEDIA_OBJECT_KEY_PATTERN),
+    kind: entryMediaKindSchema,
+    mimeType: entryMediaMimeTypeSchema,
+    sizeBytes: z.number().int().positive().max(ENTRY_MEDIA_LIMITS.maxVideoBytes),
+    width: z.number().int().positive().max(16_384).nullable().default(null),
+    height: z.number().int().positive().max(16_384).nullable().default(null),
+    durationMs: z.number().int().min(0).max(86_400_000).nullable().default(null),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const isVideo = value.mimeType.startsWith("video/");
+    if ((value.kind === "video") !== isVideo) {
+      context.addIssue({
+        code: "custom",
+        path: ["kind"],
+        message: "kind must match the media MIME type.",
+      });
+    }
+    if (!isVideo && value.sizeBytes > ENTRY_MEDIA_LIMITS.maxImageBytes) {
+      context.addIssue({
+        code: "custom",
+        path: ["sizeBytes"],
+        message: "Images must not exceed the image size limit.",
+      });
+    }
+    if (!value.objectKey.endsWith(`.${ENTRY_MEDIA_EXTENSIONS[value.mimeType]}`)) {
+      context.addIssue({
+        code: "custom",
+        path: ["objectKey"],
+        message: "objectKey extension must match the media MIME type.",
+      });
+    }
+  });
+
+const entryMediaIdsSchema = z
+  .array(z.string().trim().min(1).max(128))
+  .max(ENTRY_MEDIA_LIMITS.maxPerEntry)
+  .default([])
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "mediaIds must not contain duplicates.",
+  });
+
 export const sourceSchema = z.object({
   channel: sourceChannelSchema,
   messageId: z.string().min(1).max(256).nullable().default(null),
@@ -78,6 +158,7 @@ export const captureEntryInputSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
   source: sourceSchema,
   visibility: z.literal("private").default("private"),
+  mediaIds: entryMediaIdsSchema,
 });
 
 export const logMediaInputSchema = z
@@ -99,6 +180,7 @@ export const logMediaInputSchema = z
     timezone: z.string().trim().min(1).max(80).default("Asia/Tokyo"),
     source: sourceSchema,
     visibility: z.literal("private").default("private"),
+    mediaIds: entryMediaIdsSchema,
   })
   .superRefine((value, context) => {
     if (value.mediaKind !== null && value.mediaType !== "screen") {
@@ -310,6 +392,13 @@ export const updateEntryInputSchema = z.object({
   reason: z.string().trim().min(1).max(300).default("manual edit"),
 });
 
+export const addEntryFollowUpInputSchema = z
+  .object({
+    body: z.string().trim().min(1).max(50_000),
+    sourceChannel: sourceChannelSchema.default("web"),
+  })
+  .strict();
+
 export const confirmActionInputSchema = z.object({
   actionId: z.string().trim().min(1),
   confirmationCode: z.string().trim().min(1).max(80),
@@ -363,6 +452,12 @@ export type UpdateGameLibraryItemInput = z.infer<
 >;
 export type ListEntriesInput = z.infer<typeof listEntriesInputSchema>;
 export type UpdateEntryInput = z.infer<typeof updateEntryInputSchema>;
+export type EntryMediaKind = z.infer<typeof entryMediaKindSchema>;
+export type EntryMediaMimeType = z.infer<typeof entryMediaMimeTypeSchema>;
+export type RegisterEntryMediaInput = z.infer<
+  typeof registerEntryMediaInputSchema
+>;
+export type AddEntryFollowUpInput = z.infer<typeof addEntryFollowUpInputSchema>;
 export type ConfirmActionInput = z.infer<typeof confirmActionInputSchema>;
 export type LedgerSettings = z.infer<typeof settingsSchema>;
 export type ImportDryRunInput = z.infer<typeof importDryRunInputSchema>;
@@ -376,6 +471,25 @@ export interface ImportDryRunReport {
   ambiguous: number;
   errors: number;
   status: "dry_run" | "committed";
+}
+
+export interface EntryMedia {
+  id: string;
+  kind: EntryMediaKind;
+  mimeType: EntryMediaMimeType;
+  url: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+  createdAt: string;
+}
+
+export interface EntryFollowUp {
+  id: string;
+  body: string;
+  sourceChannel: SourceChannel;
+  createdAt: string;
 }
 
 export interface EntrySummary {
@@ -399,6 +513,8 @@ export interface EntrySummary {
   episodeLabel: string | null;
   ratingScope: RatingScope | null;
   versionNo: number;
+  media: EntryMedia[];
+  followUps: EntryFollowUp[];
 }
 
 export interface EntryRevision {
@@ -660,6 +776,16 @@ export interface CoreBinding {
   deleteEntry(id: string): Promise<EntryDetail>;
   restoreEntry(id: string): Promise<EntryDetail>;
   purgeEntry(id: string, confirmationId: string): Promise<{ id: string; purged: true }>;
+  registerEntryMedia(input: RegisterEntryMediaInput): Promise<EntryMedia>;
+  discardEntryMedia(id: string): Promise<{ id: string; discarded: true }>;
+  addEntryFollowUp(
+    entryId: string,
+    input: AddEntryFollowUpInput,
+  ): Promise<EntryDetail>;
+  deleteEntryFollowUp(
+    entryId: string,
+    followUpId: string,
+  ): Promise<EntryDetail>;
   preparePublish(id: string): Promise<PendingAction>;
   confirmAction(input: ConfirmActionInput): Promise<EntryDetail>;
   unpublishEntry(id: string): Promise<EntryDetail>;

@@ -44,6 +44,7 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
   `update_game_library_item`、`delete_game_library_item`、
   `restore_game_library_item`
 - 公开：`prepare_publish`、`confirm_action`、`unpublish_entry`
+- 补充：`add_entry_follow_up`
 - 导入：`import_dry_run`、`import_commit`
 - 导出：`export_create`、`export_list`、`export_verify`
 - 设置：`settings_get`、`settings_update`

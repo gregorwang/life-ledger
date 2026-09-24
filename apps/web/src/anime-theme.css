@@ -5135,3 +5135,11 @@ body::before {
     font-size: clamp(27px, 9vw, 39px);
   }
 }
+
+/* The off-canvas sidebar keeps its drop shadow while hidden, which bled a
+   dark band over the left edge of every page on phones. */
+@media (max-width: 900px) {
+  .app-shell:not(.mobile-nav-open) .sidebar {
+    box-shadow: none;
+  }
+}

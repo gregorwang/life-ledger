@@ -18,7 +18,6 @@ import {
   FileArchive,
   FileClock,
   FileJson,
-  Filter,
   Film,
   Globe2,
   Gamepad2,
@@ -40,7 +39,6 @@ import {
   Sparkles,
   Tag,
   Trash2,
-  Undo2,
   UploadCloud,
   UserRound,
   X,
@@ -65,11 +63,13 @@ import type {
 } from "@life-ledger/contracts";
 
 import {
+  addEntryFollowUp as apiAddEntryFollowUp,
   commitImport as apiCommitImport,
   confirmPublish as apiConfirmPublish,
   createEntry as apiCreateEntry,
   createExport as apiCreateExport,
   createImportDryRun as apiCreateImportDryRun,
+  deleteEntryFollowUp as apiDeleteEntryFollowUp,
   exportDownloadUrl,
   loadDashboard,
   loadEntry,
@@ -91,6 +91,7 @@ import {
   ENTRY_TYPES,
   type AnimeWork,
   type CaptureDraft,
+  type CaptureDraftSeed,
   type EntryStatus,
   type EntryType,
   type EntryVisibility,
@@ -102,15 +103,12 @@ import {
   type ToastMessage,
 } from "./models";
 import { GameLibraryPage } from "./GameLibraryPage";
+import { TimelineFeed, type NewPost } from "./TimelineFeed";
 import {
   sortAnimeWorks,
   type AnimeLibrarySort,
 } from "./anime-order";
 import { formatOccurredAt } from "./date-display";
-import {
-  activeEntriesByOccurredAtDesc,
-  compareEntriesByOccurredAtDesc,
-} from "./timeline-order";
 
 const ROUTES = {
   timeline: "/",
@@ -336,42 +334,6 @@ function formatAnimeLastLoggedAt(work: AnimeWork): string | null {
   );
 }
 
-function dateKey(value: string): string {
-  return new Intl.DateTimeFormat("sv-SE", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: currentTimeZone(),
-  }).format(new Date(value));
-}
-
-function dateHeading(key: string): string {
-  const today = dateKey(new Date().toISOString());
-  const yesterday = dateKey(new Date(Date.now() - 86_400_000).toISOString());
-  if (key === today) {
-    return "今天";
-  }
-  if (key === yesterday) {
-    return "昨天";
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-    timeZone: currentTimeZone(),
-  }).format(new Date(`${key}T12:00:00Z`));
-}
-
-function todayHeading(): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-    timeZone: currentTimeZone(),
-  }).format(new Date());
-}
-
 function hasSensitivePattern(value: string): boolean {
   const patterns = [
     /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i,
@@ -391,6 +353,8 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureSeed, setCaptureSeed] = useState<CaptureDraftSeed | null>(null);
+  const [composerSignal, setComposerSignal] = useState(0);
   const [commandOpen, setCommandOpen] = useState(false);
   const [entries, setEntries] = useState<LedgerEntry[]>(() =>
     USE_DEMO_DATA ? structuredClone(demoEntries) : [],
@@ -482,6 +446,15 @@ export function App() {
     return () => controller.abort();
   }, [route.kind]);
 
+  const openCapture = () => {
+    if (route.kind === "timeline") {
+      setComposerSignal((signal) => signal + 1);
+      return;
+    }
+    setCaptureSeed(null);
+    setCaptureOpen(true);
+  };
+
   useEffect(() => {
     const handlePopState = () => setRoute(parseRoute(window.location.pathname));
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -506,7 +479,7 @@ export function App() {
 
       if (!isTyping && !commandOpen && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        setCaptureOpen(true);
+        openCapture();
       }
 
       if (event.key === "Escape") {
@@ -522,7 +495,7 @@ export function App() {
       window.removeEventListener("popstate", handlePopState);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [captureOpen, commandOpen]);
+  }, [captureOpen, commandOpen, route.kind]);
 
   const updateEntry = (entryId: string, updater: (entry: LedgerEntry) => LedgerEntry) => {
     setEntries((current) =>
@@ -570,8 +543,11 @@ export function App() {
       const entry = await apiCreateEntry(draft, works);
       setEntries((current) => [entry, ...current]);
       setCaptureOpen(false);
-      pushToast("success", "已保存为私人记录", "D1、原文与首个修订已原子写入。");
-      navigate(entryPath(entry.id));
+      setCaptureSeed(null);
+      pushToast("success", "已发布到动态", "默认仅自己可见，原文与首个修订已保存。");
+      if (route.kind !== "timeline") {
+        navigate(ROUTES.timeline);
+      }
     } catch (error: unknown) {
       pushToast(
         "danger",
@@ -581,12 +557,66 @@ export function App() {
     }
   };
 
+  const createPost = async (post: NewPost): Promise<boolean> => {
+    try {
+      const entry = await apiCreateEntry(
+        {
+          type: post.type,
+          title: "",
+          bodyRaw: post.bodyRaw,
+          score: "",
+          workId: "",
+          mediaKind: "movie",
+          ratingScope: "work",
+          seasonId: "",
+          seasonLabel: "",
+          episodeLabel: "",
+          mediaIds: post.mediaIds,
+          tags: post.tags,
+        },
+        works,
+      );
+      setEntries((current) => [entry, ...current]);
+      pushToast("success", "已发布", "仅自己可见，可随时设为公开。");
+      return true;
+    } catch (error: unknown) {
+      pushToast(
+        "danger",
+        "发布失败",
+        error instanceof Error ? error.message : "事实层暂时不可用。",
+      );
+      return false;
+    }
+  };
+
+  const addFollowUp = async (entryId: string, body: string): Promise<boolean> => {
+    try {
+      const updated = await apiAddEntryFollowUp(entryId, body);
+      updateEntry(entryId, () => updated);
+      return true;
+    } catch (error: unknown) {
+      pushToast("danger", "补充失败", error instanceof Error ? error.message : "请求失败。");
+      return false;
+    }
+  };
+
+  const deleteFollowUp = async (entryId: string, followUpId: string) => {
+    try {
+      const updated = await apiDeleteEntryFollowUp(entryId, followUpId);
+      updateEntry(entryId, () => updated);
+    } catch (error: unknown) {
+      pushToast("danger", "删除补充失败", error instanceof Error ? error.message : "请求失败。");
+    }
+  };
+
   const softDeleteEntry = async (entryId: string) => {
     try {
       const updated = await apiMutateEntry(entryId, "delete");
       updateEntry(entryId, () => updated);
       pushToast("info", "记录已移入回收站", "不会出现在公开 API，可随时恢复。");
-      navigate(ROUTES.timeline);
+      if (route.kind === "entry-detail") {
+        navigate(ROUTES.timeline);
+      }
     } catch (error: unknown) {
       pushToast("danger", "删除失败", error instanceof Error ? error.message : "请求失败。");
     }
@@ -701,7 +731,7 @@ export function App() {
         deletedCount={deletedCount}
         onCollapse={() => setSidebarCollapsed((collapsed) => !collapsed)}
         onNavigate={navigate}
-        onOpenCapture={() => setCaptureOpen(true)}
+        onOpenCapture={openCapture}
       />
 
       <div
@@ -714,12 +744,22 @@ export function App() {
         <MobileHeader
           navOpen={mobileNavOpen}
           onMenu={() => setMobileNavOpen(true)}
-          onCapture={() => setCaptureOpen(true)}
+          onCapture={openCapture}
           onSearch={() => setCommandOpen(true)}
         />
         <div className="route-stage" key={currentPath}>
           {renderRoute({
             route,
+            composerSignal,
+            onCreatePost: createPost,
+            onOpenStructuredCapture: (seed) => {
+              setCaptureSeed(seed);
+              setCaptureOpen(true);
+            },
+            onAddFollowUp: addFollowUp,
+            onDeleteFollowUp: (entryId, followUpId) => {
+              void deleteFollowUp(entryId, followUpId);
+            },
             entries,
             works,
             screenWorks,
@@ -745,7 +785,11 @@ export function App() {
       <QuickCaptureDialog
         open={captureOpen}
         works={works}
-        onClose={() => setCaptureOpen(false)}
+        initial={captureSeed}
+        onClose={() => {
+          setCaptureOpen(false);
+          setCaptureSeed(null);
+        }}
         onSubmit={createEntry}
       />
 
@@ -771,6 +815,11 @@ export function App() {
 
 interface RenderRouteProps {
   route: AppRoute;
+  composerSignal: number;
+  onCreatePost: (post: NewPost) => Promise<boolean>;
+  onOpenStructuredCapture: (seed: CaptureDraftSeed) => void;
+  onAddFollowUp: (entryId: string, body: string) => Promise<boolean>;
+  onDeleteFollowUp: (entryId: string, followUpId: string) => void;
   entries: LedgerEntry[];
   works: AnimeWork[];
   screenWorks: ScreenWork[];
@@ -806,9 +855,20 @@ function renderRoute(props: RenderRouteProps): ReactNode {
         <TimelinePage
           entries={props.entries}
           works={props.works}
+          settings={props.settings}
+          composerSignal={props.composerSignal}
           navigate={props.navigate}
-          onOpenCapture={props.onOpenCapture}
+          onCreatePost={props.onCreatePost}
+          onOpenStructuredCapture={props.onOpenStructuredCapture}
           onOpenCommand={props.onOpenCommand}
+          onSoftDelete={props.onSoftDelete}
+          onSaveBody={props.onSaveBody}
+          onPreparePublish={props.onPreparePublish}
+          onConfirmPublish={props.onConfirmPublish}
+          onUnpublish={props.onUnpublish}
+          onAddFollowUp={props.onAddFollowUp}
+          onDeleteFollowUp={props.onDeleteFollowUp}
+          pushToast={props.pushToast}
         />
       );
     case "anime":
@@ -1110,336 +1170,112 @@ function StatusBadge({ visibility, status = "active" }: StatusBadgeProps) {
 interface TimelinePageProps {
   entries: LedgerEntry[];
   works: AnimeWork[];
+  settings: LedgerSettings;
+  composerSignal: number;
   navigate: (path: string) => void;
-  onOpenCapture: () => void;
+  onCreatePost: (post: NewPost) => Promise<boolean>;
+  onOpenStructuredCapture: (seed: CaptureDraftSeed) => void;
   onOpenCommand: () => void;
+  onSoftDelete: (entryId: string) => void;
+  onSaveBody: (entryId: string, bodyRaw: string) => void;
+  onPreparePublish: (entryId: string) => Promise<PendingAction>;
+  onConfirmPublish: (
+    entryId: string,
+    actionId: string,
+    confirmationCode: string,
+  ) => Promise<void>;
+  onUnpublish: (entryId: string) => void;
+  onAddFollowUp: (entryId: string, body: string) => Promise<boolean>;
+  onDeleteFollowUp: (entryId: string, followUpId: string) => void;
+  pushToast: (
+    tone: ToastMessage["tone"],
+    title: string,
+    detail: string,
+  ) => void;
 }
 
-function TimelinePage({
-  entries,
-  works,
-  navigate,
-  onOpenCapture,
-  onOpenCommand,
-}: TimelinePageProps) {
-  const [typeFilter, setTypeFilter] = useState<"all" | EntryType>("all");
-  const [visibilityFilter, setVisibilityFilter] = useState<
-    "all" | EntryVisibility
-  >("all");
-  const [showFilters, setShowFilters] = useState(false);
-
-  const visibleEntries = entries.filter(
-    (entry) =>
-      entry.status === "active" &&
-      (typeFilter === "all" || entry.type === typeFilter) &&
-      (visibilityFilter === "all" || entry.visibility === visibilityFilter),
-  );
-
-  const grouped = useMemo(() => {
-    const groups = new Map<string, LedgerEntry[]>();
-    for (const entry of visibleEntries) {
-      const key = `${dateKey(entry.occurredAt)}|${entry.datePrecision}`;
-      groups.set(key, [...(groups.get(key) ?? []), entry]);
-    }
-    return [...groups.entries()]
-      .map(
-        ([key, groupEntries]) =>
-          [key, groupEntries.sort(compareEntriesByOccurredAtDesc)] as const,
-      )
-      .sort(([a], [b]) =>
-        b.split("|", 1)[0]!.localeCompare(a.split("|", 1)[0]!),
-      );
-  }, [visibleEntries]);
-
-  const todayCount = entries.filter(
-    (entry) =>
-      entry.status === "active" &&
-      dateKey(entry.occurredAt) === dateKey(new Date().toISOString()),
-  ).length;
-  const publicCount = entries.filter(
-    (entry) => entry.status === "active" && entry.visibility === "public",
-  ).length;
-  const privateCount = entries.filter(
-    (entry) => entry.status === "active" && entry.visibility === "private",
-  ).length;
-  const recentEntry = activeEntriesByOccurredAtDesc(entries)[0] ?? null;
+function TimelinePage(props: TimelinePageProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<{
+    entryId: string;
+    action: PendingAction;
+  } | null>(null);
+  const editingEntry = editingId
+    ? props.entries.find((entry) => entry.id === editingId) ?? null
+    : null;
+  const publishingEntry = publishing
+    ? props.entries.find((entry) => entry.id === publishing.entryId) ?? null
+    : null;
 
   return (
-    <div className="page timeline-page">
-      <section className="timeline-hero">
-        <img
-          className="hero-panorama"
-          src="/assets/anime-ui/mono-panorama.webp"
-          alt=""
-          aria-hidden="true"
-          decoding="async"
-          height="2218"
-          width="3082"
+    <>
+      <TimelineFeed
+        entries={props.entries}
+        works={props.works}
+        timeZone={currentTimeZone()}
+        composerSignal={props.composerSignal}
+        onCreatePost={props.onCreatePost}
+        onOpenStructuredCapture={props.onOpenStructuredCapture}
+        onOpenCommand={props.onOpenCommand}
+        onOpenEntry={(entryId) => props.navigate(entryPath(entryId))}
+        onOpenWork={(workId) => props.navigate(animePath(workId))}
+        onEdit={(entry) => setEditingId(entry.id)}
+        onPublish={(entry) => {
+          void props
+            .onPreparePublish(entry.id)
+            .then((action) => setPublishing({ entryId: entry.id, action }))
+            .catch(() => undefined);
+        }}
+        onUnpublish={props.onUnpublish}
+        onDelete={props.onSoftDelete}
+        onAddFollowUp={props.onAddFollowUp}
+        onDeleteFollowUp={props.onDeleteFollowUp}
+        pushToast={props.pushToast}
+      />
+      {editingEntry ? (
+        <EditEntryDialog
+          entry={editingEntry}
+          open
+          onClose={() => setEditingId(null)}
+          onSave={(body) => {
+            props.onSaveBody(editingEntry.id, body);
+            setEditingId(null);
+          }}
         />
-        <img
-          className="hero-characters"
-          src="/assets/anime-ui/mono-characters.webp"
-          alt=""
-          aria-hidden="true"
-          decoding="async"
-          fetchPriority="high"
-          height="1148"
-          width="810"
-        />
-        <div className="hero-orbit-copy" aria-hidden="true">
-          <span>記憶</span>
-          <small>01 / PRIVATE WORLD</small>
-        </div>
-        <div className="hero-copy">
-          <div className="hero-kicker">
-            <span className="live-dot" />
-            {todayHeading()}
-          </div>
-          <h1>
-            早上好，
-            <br />
-            今天想留下什么？
-          </h1>
-          <p>
-            原文先于解释。所有新记录默认私人，并保留来源、修订与可撤销操作。
-          </p>
-          <div className="hero-actions">
-            <button className="primary-button" type="button" onClick={onOpenCapture}>
-              <Plus aria-hidden="true" size={17} />
-              新建记录
-            </button>
-            <button className="secondary-button" type="button" onClick={onOpenCommand}>
-              <Search aria-hidden="true" size={16} />
-              搜索全部
-              <kbd>⌘K</kbd>
-            </button>
-          </div>
-        </div>
-        <div className="hero-safety-note">
-          <ShieldCheck aria-hidden="true" size={18} />
-          <div>
-            <strong>默认私人</strong>
-            <span>发布前需要预览与文本确认</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="metrics-row" aria-label="今日概览">
-        <MetricCard
-          icon={MessageCircleMore}
-          label="今日记录"
-          value={String(todayCount)}
-          detail="来自微信与网页"
-          tone="blue"
-        />
-        <MetricCard
-          icon={LockKeyhole}
-          label="私人事实"
-          value={String(privateCount)}
-          detail="不会出现在公开接口"
-          tone="green"
-        />
-        <MetricCard
-          icon={Globe2}
-          label="公开投影"
-          value={String(publicCount)}
-          detail="字段白名单生效"
-          tone="purple"
-        />
-        <MetricCard
-          icon={Library}
-          label="动漫作品"
-          value={String(works.length)}
-          detail={`${entries.filter((entry) => entry.type === "anime").length} 条观看记录`}
-          tone="amber"
-        />
-      </section>
-
-      {recentEntry ? (
-        <section className="recent-action-card">
-          <div className="recent-action-icon">
-            <Undo2 aria-hidden="true" size={18} />
-          </div>
-          <div>
-            <span className="tiny-label">最近记录 · 可立即校对</span>
-            <strong>
-              {recentEntry.title ||
-                recentEntry.bodySummary ||
-                recentEntry.bodyRaw.slice(0, 80)}
-            </strong>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate(entryPath(recentEntry.id))}
-          >
-            校对字段
-            <ArrowRight aria-hidden="true" size={15} />
-          </button>
-        </section>
       ) : null}
-
-      <section className="timeline-section">
-        <div className="section-heading-row">
-          <div>
-            <p className="eyebrow">PERSONAL EVENT STREAM</p>
-            <h2>你的时间线</h2>
-          </div>
-          <div className="timeline-toolbar">
-            <button
-              className="search-trigger"
-              type="button"
-              onClick={onOpenCommand}
-            >
-              <Search aria-hidden="true" size={16} />
-              <span>搜索记录</span>
-              <kbd>⌘K</kbd>
-            </button>
-            <button
-              className={showFilters ? "filter-button is-active" : "filter-button"}
-              type="button"
-              aria-expanded={showFilters}
-              onClick={() => setShowFilters((shown) => !shown)}
-            >
-              <Filter aria-hidden="true" size={16} />
-              筛选
-            </button>
-          </div>
-        </div>
-
-        {showFilters ? (
-          <div className="filter-panel">
-            <FilterGroup label="记录类型">
-              <FilterChip
-                active={typeFilter === "all"}
-                label="全部"
-                onClick={() => setTypeFilter("all")}
-              />
-              {ENTRY_TYPES.map((type) => (
-                <FilterChip
-                  key={type}
-                  active={typeFilter === type}
-                  label={TYPE_LABELS[type]}
-                  onClick={() => setTypeFilter(type)}
-                />
-              ))}
-            </FilterGroup>
-            <FilterGroup label="可见性">
-              {(["all", "private", "publish_pending", "public"] as const).map(
-                (visibility) => (
-                  <FilterChip
-                    key={visibility}
-                    active={visibilityFilter === visibility}
-                    label={
-                      visibility === "all"
-                        ? "全部"
-                        : VISIBILITY_LABELS[visibility]
-                    }
-                    onClick={() => setVisibilityFilter(visibility)}
-                  />
-                ),
-              )}
-            </FilterGroup>
-          </div>
-        ) : null}
-
-        <div className="timeline-groups">
-          {grouped.length ? (
-            grouped.map(([key, groupEntries]) => (
-              <section className="timeline-group" key={key}>
-                <div className="date-marker">
-                  <strong>
-                    {groupEntries[0]?.datePrecision === "exact"
-                      ? dateHeading(key.split("|", 1)[0]!)
-                      : groupEntries[0]
-                        ? formatEntryOccurredAt(groupEntries[0])
-                        : ""}
-                  </strong>
-                  <span>{key.split("|", 1)[0]!.replaceAll("-", ".")}</span>
-                  <i />
-                </div>
-                <div className="entry-list">
-                  {groupEntries.map((entry) => (
-                    <EntryCard
-                      key={entry.id}
-                      entry={entry}
-                      work={works.find((work) => work.id === entry.mediaWorkId)}
-                      onOpen={() => navigate(entryPath(entry.id))}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))
-          ) : (
-            <EmptyState
-              icon={Search}
-              title="没有匹配的记录"
-              detail="调整类型或可见性筛选，原始数据不会被改动。"
-              actionLabel="清除筛选"
-              onAction={() => {
-                setTypeFilter("all");
-                setVisibilityFilter("all");
-              }}
-            />
+      {publishing && publishingEntry ? (
+        <PublishDialog
+          entry={publishingEntry}
+          work={props.works.find(
+            (work) => work.id === publishingEntry.mediaWorkId,
           )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-interface MetricCardProps {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  detail: string;
-  tone: "blue" | "green" | "purple" | "amber";
-}
-
-function MetricCard({ icon: Icon, label, value, detail, tone }: MetricCardProps) {
-  return (
-    <article className={`metric-card metric-${tone}`}>
-      <div className="metric-icon">
-        <Icon aria-hidden="true" size={18} />
-      </div>
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{detail}</small>
-      </div>
-    </article>
-  );
-}
-
-interface FilterChipProps {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}
-
-function FilterChip({ active, label, onClick }: FilterChipProps) {
-  return (
-    <button
-      className={active ? "filter-chip is-active" : "filter-chip"}
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-interface FilterGroupProps {
-  label: string;
-  children: ReactNode;
-}
-
-function FilterGroup({ label, children }: FilterGroupProps) {
-  return (
-    <div className="filter-group">
-      <span>{label}</span>
-      <div>{children}</div>
-    </div>
+          pendingAction={publishing.action}
+          open
+          onClose={() => {
+            setPublishing(null);
+            void props.onUnpublish(publishingEntry.id);
+          }}
+          onConfirm={async () => {
+            try {
+              await props.onConfirmPublish(
+                publishingEntry.id,
+                publishing.action.actionId,
+                publishing.action.confirmationCode,
+              );
+              setPublishing(null);
+            } catch {
+              // The toast from onConfirmPublish already explains the failure.
+            }
+          }}
+          sensitiveMatch={
+            props.settings.sensitiveWarning &&
+            hasSensitivePattern(
+              `${publishingEntry.title}\n${publishingEntry.bodyRaw}`,
+            )
+          }
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -3972,20 +3808,19 @@ function EmptyState({
 interface QuickCaptureDialogProps {
   open: boolean;
   works: AnimeWork[];
+  initial: CaptureDraftSeed | null;
   onClose: () => void;
   onSubmit: (draft: CaptureDraft) => void;
 }
 
-function QuickCaptureDialog({
-  open,
-  works,
-  onClose,
-  onSubmit,
-}: QuickCaptureDialogProps) {
-  const [draft, setDraft] = useState<CaptureDraft>({
-    type: works.length ? "anime" : "note",
+function initialCaptureDraft(
+  works: AnimeWork[],
+  seed: CaptureDraftSeed | null,
+): CaptureDraft {
+  return {
+    type: seed?.type ?? (works.length ? "anime" : "note"),
     title: "",
-    bodyRaw: "",
+    bodyRaw: seed?.bodyRaw ?? "",
     score: "",
     workId: works[0]?.id ?? "",
     mediaKind: "movie",
@@ -3993,24 +3828,26 @@ function QuickCaptureDialog({
     seasonId: "",
     seasonLabel: "",
     episodeLabel: "",
-  });
+    mediaIds: seed?.mediaIds ?? [],
+  };
+}
+
+function QuickCaptureDialog({
+  open,
+  works,
+  initial,
+  onClose,
+  onSubmit,
+}: QuickCaptureDialogProps) {
+  const [draft, setDraft] = useState<CaptureDraft>(() =>
+    initialCaptureDraft(works, initial),
+  );
 
   useEffect(() => {
     if (open) {
-      setDraft({
-        type: works.length ? "anime" : "note",
-        title: "",
-        bodyRaw: "",
-        score: "",
-        workId: works[0]?.id ?? "",
-        mediaKind: "movie",
-        ratingScope: "work",
-        seasonId: "",
-        seasonLabel: "",
-        episodeLabel: "",
-      });
+      setDraft(initialCaptureDraft(works, initial));
     }
-  }, [open, works]);
+  }, [open, works, initial]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -4350,6 +4187,15 @@ function QuickCaptureDialog({
                   ) : null}
                 </div>
               ) : null}
+            </div>
+          ) : null}
+          {draft.mediaIds.length ? (
+            <div className="privacy-callout">
+              <Film aria-hidden="true" size={17} />
+              <div>
+                <strong>附带 {draft.mediaIds.length} 个照片 / 视频</strong>
+                <span>来自动态输入框，保存后一起出现在这条记录里。</span>
+              </div>
             </div>
           ) : null}
           <div className="privacy-callout">

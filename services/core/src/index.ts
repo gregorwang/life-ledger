@@ -6,6 +6,7 @@ import {
 } from "cloudflare:workers";
 
 import {
+  addEntryFollowUpInputSchema,
   captureEntryInputSchema,
   confirmActionInputSchema,
   createGameLibraryItemInputSchema,
@@ -16,6 +17,7 @@ import {
   listEntriesInputSchema,
   listMediaWorksInputSchema,
   logMediaInputSchema,
+  registerEntryMediaInputSchema,
   normalizeMediaTitle,
   publicAnimeResponseSchema,
   publicTimelineItemSchema,
@@ -26,6 +28,7 @@ import {
   updateGameLibraryItemInputSchema,
   updateMediaSeasonInputSchema,
   updateMediaWorkInputSchema,
+  type AddEntryFollowUpInput,
   type AnimeWorkDetail,
   type AnimeWorkSummary,
   type AuditEvent,
@@ -35,6 +38,8 @@ import {
   type CreateMediaSeasonInput,
   type CreateMediaWorkInput,
   type EntryDetail,
+  type EntryFollowUp,
+  type EntryMedia,
   type EntryRevision,
   type EntryStatus,
   type EntrySummary,
@@ -58,6 +63,7 @@ import {
   type MediaWorkDetail,
   type MediaWorkSummary,
   type MutationResult,
+  type RegisterEntryMediaInput,
   type PendingAction,
   type PublicAnimeItem,
   type PublicAnimeResponse,
@@ -124,6 +130,27 @@ interface EntryRow {
   season_label: string | null;
   episode_label: string | null;
   score_100: number | null;
+}
+
+interface EntryMediaRow {
+  id: string;
+  entry_id: string | null;
+  kind: EntryMedia["kind"];
+  object_key: string;
+  mime_type: EntryMedia["mimeType"];
+  size_bytes: number;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+interface EntryFollowUpRow {
+  id: string;
+  entry_id: string;
+  body_raw: string;
+  source_channel: SourceChannel;
+  created_at: string;
 }
 
 interface RevisionRow {
@@ -446,8 +473,47 @@ function toSummary(row: EntryRow): EntrySummary {
     episodeLabel: row.episode_label,
     ratingScope: row.rating_scope,
     versionNo: row.version_no,
+    media: [],
+    followUps: [],
   };
 }
+
+/**
+ * Entries captured before media attachments existed were hashed without a
+ * mediaIds field; omit it when empty so retried source messages still match.
+ */
+function idempotencyFingerprint(input: { mediaIds: string[] }): string {
+  const { mediaIds, ...rest } = input;
+  return JSON.stringify(mediaIds.length > 0 ? input : rest);
+}
+
+function toEntryMedia(row: EntryMediaRow): EntryMedia {
+  return {
+    id: row.id,
+    kind: row.kind,
+    mimeType: row.mime_type,
+    url: `/media/${row.object_key}`,
+    sizeBytes: row.size_bytes,
+    width: row.width,
+    height: row.height,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at,
+  };
+}
+
+function toEntryFollowUp(row: EntryFollowUpRow): EntryFollowUp {
+  return {
+    id: row.id,
+    body: row.body_raw,
+    sourceChannel: row.source_channel,
+    createdAt: row.created_at,
+  };
+}
+
+const ENTRY_MEDIA_COLUMNS = `
+  id, entry_id, kind, object_key, mime_type, size_bytes,
+  width, height, duration_ms, created_at
+`;
 
 function toExportRecord(row: ExportRow): ExportRecord {
   return {
@@ -587,6 +653,8 @@ const FULL_EXPORT_TABLES = [
   "import_batches",
   "media_assets",
   "media_upload_requests",
+  "entry_media",
+  "entry_follow_ups",
 ] as const;
 
 const EXPORT_PAGE_SIZE = 250;
@@ -781,6 +849,35 @@ async function collectIncrementalExport(
         `
           SELECT *
           FROM media_upload_requests
+          WHERE user_id = ? AND created_at > ? AND created_at <= ?
+          ORDER BY created_at, id
+        `,
+        [USER_ID, start, cutoff],
+      ),
+    },
+    {
+      name: "entry_media",
+      rows: await readPagedRows(
+        database,
+        `
+          SELECT *
+          FROM entry_media
+          WHERE
+            user_id = ? AND
+            coalesce(attached_at, created_at) > ? AND
+            coalesce(attached_at, created_at) <= ?
+          ORDER BY created_at, id
+        `,
+        [USER_ID, start, cutoff],
+      ),
+    },
+    {
+      name: "entry_follow_ups",
+      rows: await readPagedRows(
+        database,
+        `
+          SELECT *
+          FROM entry_follow_ups
           WHERE user_id = ? AND created_at > ? AND created_at <= ?
           ORDER BY created_at, id
         `,
@@ -1512,7 +1609,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       .bind(...values)
       .all<EntryRow>();
 
-    return result.results.map(toSummary);
+    return this.#withEntryExtras(result.results.map(toSummary));
   }
 
   async getEntry(id: string): Promise<EntryDetail | null> {
@@ -1575,8 +1672,9 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       }),
     );
 
+    const [hydrated] = await this.#withEntryExtras([toSummary(row)]);
     return {
-      ...toSummary(row),
+      ...hydrated!,
       sourceMessageId: row.source_message_id,
       sourceConversationId: row.source_conversation_id,
       temporalUncertain: row.temporal_uncertain === 1,
@@ -1594,7 +1692,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         ? "approximate"
         : parsed.datePrecision;
     const actor = actorForSource(parsed.source.channel);
-    const requestHash = await sha256(JSON.stringify(parsed));
+    const requestHash = await sha256(idempotencyFingerprint(parsed));
     const existing = await this.#findIdempotent(
       parsed.source.channel,
       parsed.source.messageId,
@@ -1603,6 +1701,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       return this.#resolveIdempotent(existing, requestHash);
     }
 
+    await this.#assertAttachableMedia(parsed.mediaIds);
     const entryId = createId("ent");
     const requestId = createId("req");
     const createdAt = nowIso();
@@ -1665,6 +1764,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           "Generic entry captured; visibility forced to private.",
           createdAt,
         ),
+        ...this.#attachMediaStatements(entryId, parsed.mediaIds, createdAt),
       ]);
     } catch (error: unknown) {
       const concurrent = await this.#findIdempotent(
@@ -1684,7 +1784,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     const parsed = logMediaInputSchema.parse(input);
     const occurredAt = utcIso(parsed.occurredAt);
     const actor = actorForSource(parsed.source.channel);
-    const requestHash = await sha256(JSON.stringify(parsed));
+    const requestHash = await sha256(idempotencyFingerprint(parsed));
     const existing = await this.#findIdempotent(
       parsed.source.channel,
       parsed.source.messageId,
@@ -1693,6 +1793,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       return this.#resolveIdempotent(existing, requestHash);
     }
 
+    await this.#assertAttachableMedia(parsed.mediaIds);
     const createdAt = nowIso();
     const requestId = createId("req");
     const entryId = createId("ent");
@@ -1930,6 +2031,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         "Media log captured; visibility forced to private.",
         createdAt,
       ),
+      ...this.#attachMediaStatements(entryId, parsed.mediaIds, createdAt),
     );
     try {
       await this.env.DB.batch(writeStatements);
@@ -2161,6 +2263,11 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       );
     }
     const timestamp = nowIso();
+    const mediaKeys = await this.env.DB.prepare(`
+      SELECT object_key FROM entry_media WHERE user_id = ? AND entry_id = ?
+    `)
+      .bind(USER_ID, id)
+      .all<{ object_key: string }>();
     const purgeResults = await this.env.DB.batch([
       this.env.DB.prepare(`
         DELETE FROM pending_actions
@@ -2194,7 +2301,171 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         409,
       );
     }
+    const objectKeys = mediaKeys.results.map((row) => row.object_key);
+    if (objectKeys.length > 0) {
+      await this.env.MEDIA.delete(objectKeys);
+    }
     return { id, purged: true };
+  }
+
+  async registerEntryMedia(input: RegisterEntryMediaInput): Promise<EntryMedia> {
+    const parsed = registerEntryMediaInputSchema.parse(input);
+    const id = createId("media");
+    const createdAt = nowIso();
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        INSERT INTO entry_media (
+          id, user_id, entry_id, position, kind, object_key, mime_type,
+          size_bytes, width, height, duration_ms, created_at, attached_at
+        ) VALUES (?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      `).bind(
+        id,
+        USER_ID,
+        parsed.kind,
+        parsed.objectKey,
+        parsed.mimeType,
+        parsed.sizeBytes,
+        parsed.width,
+        parsed.height,
+        parsed.durationMs,
+        createdAt,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        "user",
+        ACTOR_USER,
+        "entry_media.uploaded",
+        id,
+        `Entry ${parsed.kind} stored in R2 and awaiting attachment.`,
+        createdAt,
+        "entry_media",
+      ),
+    ]);
+    const row = await this.env.DB.prepare(`
+      SELECT ${ENTRY_MEDIA_COLUMNS} FROM entry_media WHERE id = ?
+    `)
+      .bind(id)
+      .first<EntryMediaRow>();
+    if (!row) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_WRITE_FAILED",
+        "Entry media metadata could not be persisted.",
+        500,
+      );
+    }
+    return toEntryMedia(row);
+  }
+
+  async discardEntryMedia(id: string): Promise<{ id: string; discarded: true }> {
+    const row = await this.env.DB.prepare(`
+      SELECT ${ENTRY_MEDIA_COLUMNS}
+      FROM entry_media
+      WHERE user_id = ? AND id = ?
+    `)
+      .bind(USER_ID, id)
+      .first<EntryMediaRow>();
+    if (!row) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_NOT_FOUND",
+        "Entry media not found.",
+        404,
+      );
+    }
+    if (row.entry_id !== null) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_ATTACHED",
+        "Media already attached to an entry cannot be discarded separately.",
+        409,
+      );
+    }
+    await this.env.DB.prepare(`
+      DELETE FROM entry_media
+      WHERE user_id = ? AND id = ? AND entry_id IS NULL
+    `)
+      .bind(USER_ID, id)
+      .run();
+    await this.env.MEDIA.delete(row.object_key);
+    return { id, discarded: true };
+  }
+
+  async addEntryFollowUp(
+    entryId: string,
+    input: AddEntryFollowUpInput,
+  ): Promise<EntryDetail> {
+    const parsed = addEntryFollowUpInputSchema.parse(input);
+    const current = await this.#requireEntry(entryId);
+    if (current.status === "deleted") {
+      throw new LedgerDomainError(
+        "ENTRY_DELETED",
+        "Restore the entry before adding a follow-up.",
+        409,
+      );
+    }
+    const actor = actorForSource(parsed.sourceChannel);
+    const followUpId = createId("followup");
+    const createdAt = nowIso();
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        INSERT INTO entry_follow_ups (
+          id, user_id, entry_id, body_raw, source_channel, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        followUpId,
+        USER_ID,
+        entryId,
+        parsed.body,
+        parsed.sourceChannel,
+        createdAt,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        actor.actorType,
+        actor.actorId,
+        "entry.follow_up_added",
+        entryId,
+        "Follow-up note appended to the entry.",
+        createdAt,
+      ),
+    ]);
+    return this.#requireEntry(entryId);
+  }
+
+  async deleteEntryFollowUp(
+    entryId: string,
+    followUpId: string,
+  ): Promise<EntryDetail> {
+    await this.#requireEntry(entryId);
+    const timestamp = nowIso();
+    const results = await this.env.DB.batch([
+      this.env.DB.prepare(`
+        DELETE FROM entry_follow_ups
+        WHERE user_id = ? AND entry_id = ? AND id = ?
+      `).bind(USER_ID, entryId, followUpId),
+      this.env.DB.prepare(`
+        INSERT INTO audit_events (
+          id, request_id, user_id, actor_type, actor_id,
+          action, target_type, target_id, detail, metadata_json, created_at
+        )
+        SELECT ?, ?, ?, 'user', ?, 'entry.follow_up_deleted', 'entry', ?, ?, '{}', ?
+        WHERE changes() = 1
+      `).bind(
+        createId("audit"),
+        createId("req"),
+        USER_ID,
+        ACTOR_USER,
+        entryId,
+        "Follow-up note removed from the entry.",
+        timestamp,
+      ),
+    ]);
+    if ((results[0]?.meta.changes ?? 0) === 0) {
+      throw new LedgerDomainError(
+        "FOLLOW_UP_NOT_FOUND",
+        "Follow-up not found.",
+        404,
+      );
+    }
+    return this.#requireEntry(entryId);
   }
 
   async preparePublish(id: string): Promise<PendingAction> {
@@ -3674,6 +3945,83 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           )
       `).bind(timestamp, USER_ID, timestamp),
     ]);
+  }
+
+  async #withEntryExtras<T extends EntrySummary>(entries: T[]): Promise<T[]> {
+    if (entries.length === 0) {
+      return entries;
+    }
+    const ids = JSON.stringify(entries.map((entry) => entry.id));
+    const [mediaResult, followUpResult] = await this.env.DB.batch<
+      EntryMediaRow | EntryFollowUpRow
+    >([
+      this.env.DB.prepare(`
+        SELECT ${ENTRY_MEDIA_COLUMNS}
+        FROM entry_media
+        WHERE user_id = ? AND entry_id IN (SELECT value FROM json_each(?))
+        ORDER BY entry_id, position, created_at
+      `).bind(USER_ID, ids),
+      this.env.DB.prepare(`
+        SELECT id, entry_id, body_raw, source_channel, created_at
+        FROM entry_follow_ups
+        WHERE user_id = ? AND entry_id IN (SELECT value FROM json_each(?))
+        ORDER BY entry_id, created_at, id
+      `).bind(USER_ID, ids),
+    ]);
+    const mediaByEntry = new Map<string, EntryMedia[]>();
+    for (const row of (mediaResult?.results ?? []) as EntryMediaRow[]) {
+      const list = mediaByEntry.get(row.entry_id!) ?? [];
+      list.push(toEntryMedia(row));
+      mediaByEntry.set(row.entry_id!, list);
+    }
+    const followUpsByEntry = new Map<string, EntryFollowUp[]>();
+    for (const row of (followUpResult?.results ?? []) as EntryFollowUpRow[]) {
+      const list = followUpsByEntry.get(row.entry_id) ?? [];
+      list.push(toEntryFollowUp(row));
+      followUpsByEntry.set(row.entry_id, list);
+    }
+    return entries.map((entry) => ({
+      ...entry,
+      media: mediaByEntry.get(entry.id) ?? [],
+      followUps: followUpsByEntry.get(entry.id) ?? [],
+    }));
+  }
+
+  async #assertAttachableMedia(mediaIds: string[]): Promise<void> {
+    if (mediaIds.length === 0) {
+      return;
+    }
+    const row = await this.env.DB.prepare(`
+      SELECT count(*) AS count
+      FROM entry_media
+      WHERE
+        user_id = ? AND
+        entry_id IS NULL AND
+        id IN (SELECT value FROM json_each(?))
+    `)
+      .bind(USER_ID, JSON.stringify(mediaIds))
+      .first<{ count: number }>();
+    if ((row?.count ?? 0) !== mediaIds.length) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UNAVAILABLE",
+        "Some media are missing or already attached to another entry.",
+        409,
+      );
+    }
+  }
+
+  #attachMediaStatements(
+    entryId: string,
+    mediaIds: string[],
+    attachedAt: string,
+  ): D1PreparedStatement[] {
+    return mediaIds.map((mediaId, position) =>
+      this.env.DB.prepare(`
+        UPDATE entry_media
+        SET entry_id = ?, position = ?, attached_at = ?
+        WHERE user_id = ? AND id = ? AND entry_id IS NULL
+      `).bind(entryId, position, attachedAt, USER_ID, mediaId),
+    );
   }
 
   async #requireEntry(id: string): Promise<EntryDetail> {

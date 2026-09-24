@@ -50,6 +50,7 @@ export type McpCoreBinding = Pick<
   | "preparePublish"
   | "confirmAction"
   | "unpublishEntry"
+  | "addEntryFollowUp"
   | "createImportDryRun"
   | "commitImport"
   | "createExport"
@@ -831,6 +832,24 @@ export function createServer(core: McpCoreBinding): McpServer {
       },
     },
     ({ entryId }) => toolResult(() => core.unpublishEntry(entryId)),
+  );
+
+  server.registerTool(
+    "add_entry_follow_up",
+    {
+      title: "补充记录",
+      description:
+        "给已有记录追加一段补充（后续想法），原文保持不变；补充按时间顺序显示在该条动态下方。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        body: z.string().trim().min(1).max(50_000),
+      }),
+      annotations: safeWriteAnnotations,
+    },
+    ({ entryId, body }) =>
+      toolResult(() =>
+        core.addEntryFollowUp(entryId, { body, sourceChannel: "mcp" }),
+      ),
   );
 
   server.registerTool(

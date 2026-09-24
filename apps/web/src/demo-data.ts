@@ -117,6 +117,15 @@ export const demoEntries: LedgerEntry[] = [
     episodeLabel: "4",
     ratingScope: "episode",
     versionNo: 1,
+    media: [],
+    followUps: [
+      {
+        id: "followup-rezero-04",
+        body: "隔天又想了一下：节奏赶主要是因为原作这一卷信息量太大，可以理解。",
+        sourceChannel: "web",
+        createdAt: `${today}T12:05:00Z`,
+      },
+    ],
     revisions: [
       {
         id: "rev-rezero-01",
@@ -159,6 +168,8 @@ export const demoEntries: LedgerEntry[] = [
     episodeLabel: null,
     ratingScope: null,
     versionNo: 2,
+    media: [],
+    followUps: [],
     revisions: [
       {
         id: "rev-idea-01",
@@ -209,6 +220,18 @@ export const demoEntries: LedgerEntry[] = [
     episodeLabel: "8",
     ratingScope: "episode",
     versionNo: 2,
+    media: [
+      {
+        id: "media-bocchi-stage",
+        kind: "image",
+        mimeType: "image/jpeg",
+        url: "/assets/anime-ui/bocchi-stage.jpg",
+        width: 1760,
+        height: 2160,
+        durationMs: null,
+      },
+    ],
+    followUps: [],
     revisions: [
       {
         id: "rev-bocchi-01",
@@ -259,6 +282,8 @@ export const demoEntries: LedgerEntry[] = [
     episodeLabel: null,
     ratingScope: null,
     versionNo: 1,
+    media: [],
+    followUps: [],
     revisions: [
       {
         id: "rev-mood-01",
@@ -301,6 +326,8 @@ export const demoEntries: LedgerEntry[] = [
     episodeLabel: "7",
     ratingScope: "episode",
     versionNo: 1,
+    media: [],
+    followUps: [],
     revisions: [
       {
         id: "rev-chiramune-01",
@@ -342,6 +369,8 @@ export const demoEntries: LedgerEntry[] = [
     episodeLabel: "18",
     ratingScope: "episode",
     versionNo: 1,
+    media: [],
+    followUps: [],
     revisions: [
       {
         id: "rev-frieren-01",
