@@ -43,7 +43,6 @@ export type McpCoreBinding = Pick<
   | "updateGameLibraryItem"
   | "deleteGameLibraryItem"
   | "restoreGameLibraryItem"
-  | "listCollectibles"
   | "listSeasons"
   | "createSeason"
   | "updateSeason"
@@ -640,18 +639,6 @@ export function createServer(core: McpCoreBinding): McpServer {
       toolResult(() =>
         core.restoreGameLibraryItem(gameLibraryItemId, versionNo),
       ),
-  );
-
-  server.registerTool(
-    "list_collectibles",
-    {
-      title: "读取赛博收藏室",
-      description:
-        "读取现实手办、谷子和公仔的数字档案，包括参考图、模型键与可见/隐藏区域几何置信度。",
-      inputSchema: z.object({}),
-      annotations: readOnlyAnnotations,
-    },
-    () => toolResult(() => core.listCollectibles()),
   );
 
   server.registerTool(

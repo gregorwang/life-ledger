@@ -101,7 +101,7 @@ function requestEtagMatches(header: string | undefined, etag: string): boolean {
 
 function mediaKeyFromPath(path: string): string | null {
   const key = path.slice("/media/".length);
-  return /^covers\/(?:anime|screen|game|collectible)\/[a-z0-9][a-z0-9-]*-v\d+\.webp$/.test(
+  return /^covers\/(?:anime|screen|game)\/[a-z0-9][a-z0-9-]*-v\d+\.webp$/.test(
     key,
   )
     ? key
@@ -902,12 +902,6 @@ app.post("/api/v1/game-library/:id/restore", async (context) => {
       versionNo,
     ),
   );
-});
-
-app.get("/api/v1/collectibles", async (context) => {
-  return context.json({
-    items: await context.env.CORE.listCollectibles(),
-  });
 });
 
 app.get("/api/v1/entries/:id", async (context) => {

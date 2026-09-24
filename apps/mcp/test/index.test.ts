@@ -47,7 +47,6 @@ function createCore(
     updateGameLibraryItem: failUnexpectedCall,
     deleteGameLibraryItem: failUnexpectedCall,
     restoreGameLibraryItem: failUnexpectedCall,
-    listCollectibles: failUnexpectedCall,
     listSeasons: failUnexpectedCall,
     createSeason: failUnexpectedCall,
     updateSeason: failUnexpectedCall,
@@ -119,7 +118,6 @@ const expectedToolNames = [
   "update_game_library_item",
   "delete_game_library_item",
   "restore_game_library_item",
-  "list_collectibles",
   "create_media_work",
   "update_media_work",
   "upload_media_image",
@@ -281,7 +279,6 @@ describe("Life Ledger MCP 工具契约", () => {
   it("正确路由媒体、季度、导入、导出与设置操作", async () => {
     const listMediaWorks = vi.fn(async () => []);
     const listGameLibrary = vi.fn(async () => []);
-    const listCollectibles = vi.fn(async () => []);
     const createSeason = vi.fn(
       async (): Promise<never> => {
         throw new Error("SEASON_STOP");
@@ -307,7 +304,6 @@ describe("Life Ledger MCP 工具契约", () => {
       createCore({
         listMediaWorks,
         listGameLibrary,
-        listCollectibles,
         createSeason,
         commitImport,
         verifyExport,
@@ -325,10 +321,6 @@ describe("Life Ledger MCP 工具契约", () => {
         });
         await client.callTool({
           name: "list_game_library",
-          arguments: {},
-        });
-        await client.callTool({
-          name: "list_collectibles",
           arguments: {},
         });
         await client.callTool({
@@ -368,7 +360,6 @@ describe("Life Ledger MCP 工具契约", () => {
       }),
     );
     expect(listGameLibrary).toHaveBeenCalledOnce();
-    expect(listCollectibles).toHaveBeenCalledOnce();
     expect(createSeason).toHaveBeenCalledWith(
       "work_001",
       expect.objectContaining({

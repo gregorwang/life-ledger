@@ -7,7 +7,6 @@ import type {
   ExportVerification,
   GameLibraryItem,
   ImportDryRunReport,
-  CollectibleItem,
   MediaWorkDetail,
   MediaWorkSummary,
   MutationResult,
@@ -236,16 +235,6 @@ export async function loadGameLibrary(
 ): Promise<GameLibraryItem[]> {
   const response = await requestJson<{ items: GameLibraryItem[] }>(
     "/api/v1/game-library",
-    signal ? { signal } : undefined,
-  );
-  return response.items;
-}
-
-export async function loadCollectibles(
-  signal?: AbortSignal,
-): Promise<CollectibleItem[]> {
-  const response = await requestJson<{ items: CollectibleItem[] }>(
-    "/api/v1/collectibles",
     signal ? { signal } : undefined,
   );
   return response.items;

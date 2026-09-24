@@ -1,4 +1,4 @@
-"""Prepare PlayStation covers and figure references for the private R2 bucket."""
+"""Prepare PlayStation covers for the private R2 bucket."""
 
 from __future__ import annotations
 
@@ -99,22 +99,6 @@ def main() -> None:
                 slug,
                 read_remote(game["sourceCoverUrl"]),
                 game["sourceCoverUrl"],
-            )
-        )
-
-    references = PROJECT_ROOT / "recon" / "sakura-angel-figure" / "references"
-    for slug, filename in (
-        ("sakura-angel-front-wide", "front-wide.jpg"),
-        ("sakura-angel-front-close", "front-close.jpg"),
-        ("sakura-angel-back", "back.jpg"),
-    ):
-        source = references / filename
-        results.append(
-            write_image(
-                "collectible",
-                slug,
-                Image.open(source).copy(),
-                f"user-supplied:{filename}",
             )
         )
 

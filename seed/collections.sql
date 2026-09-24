@@ -725,26 +725,3 @@ INSERT OR REPLACE INTO game_library_items (
   '2026-07-26T00:00:00.000Z'
 );
 
-INSERT OR REPLACE INTO collectible_items (
-  id, user_id, category, title, franchise, character_name, manufacturer,
-  status, cover_url, source_image_urls_json, model_kind, model_key,
-  geometry_confidence, hidden_region_confidence, notes, created_at, updated_at
-) VALUES (
-  'collectible_sakura_angel_figure',
-  'user_primary',
-  'figure',
-  '木之本樱 天使羽翼坐姿手办',
-  '魔卡少女樱',
-  '木之本樱',
-  'BANPRESTO',
-  'owned',
-  '/media/covers/collectible/sakura-angel-front-wide-v1.webp',
-  '["/media/covers/collectible/sakura-angel-front-wide-v1.webp","/media/covers/collectible/sakura-angel-front-close-v1.webp","/media/covers/collectible/sakura-angel-back-v1.webp"]',
-  'procedural-threejs',
-  'sakura-angel-figure-v2',
-  0.76,
-  0.46,
-  '依据两张正面与一张背面实拍进行最高相似度程序化重建；侧面、手部遮挡区与羽裙内部属于有标注的结构推断。',
-  '2026-07-26T00:00:00.000Z',
-  '2026-07-26T00:00:00.000Z'
-);

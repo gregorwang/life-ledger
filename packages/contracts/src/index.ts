@@ -530,25 +530,6 @@ export interface GameLibraryItem {
   deletedAt: string | null;
 }
 
-export interface CollectibleItem {
-  id: string;
-  category: "figure" | "merch" | "plush";
-  title: string;
-  franchise: string | null;
-  characterName: string | null;
-  manufacturer: string | null;
-  status: "owned" | "planned" | "archived";
-  coverUrl: string | null;
-  sourceImageUrls: string[];
-  modelKind: "procedural-threejs" | "glb";
-  modelKey: string | null;
-  geometryConfidence: number;
-  hiddenRegionConfidence: number;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface MediaImageUploadResult {
   objectKey: string;
   publicUrl: string;
@@ -721,7 +702,6 @@ export interface CoreBinding {
     id: string,
     versionNo: number,
   ): Promise<GameLibraryItem>;
-  listCollectibles(): Promise<CollectibleItem[]>;
   getPublicAnime(): Promise<PublicAnimeResponse>;
   getPublicTimeline(): Promise<PublicTimelineResponse>;
   getSettings(): Promise<LedgerSettings>;
