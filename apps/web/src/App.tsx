@@ -62,6 +62,7 @@ import {
 } from "react";
 import {
   MOOD_TAG_PREFIX,
+  replaceStickerCodes,
   withMoodTag,
   type EntryLink,
   type SearchHit,
@@ -117,6 +118,8 @@ import {
 import { GameLibraryPage } from "./GameLibraryPage";
 import { LocalBackupPanel } from "./LocalBackupPanel";
 import { PlacesPage } from "./PlacesPage";
+import { RelatedEntries } from "./RelatedEntries";
+import { Select } from "./Select";
 import { ReviewPage } from "./ReviewPage";
 import { ShelfPage } from "./ShelfPage";
 import {
@@ -366,6 +369,9 @@ function getRoutePath(route: AppRoute): string {
 
 /** Library page for a linked item, opened on that item. */
 function linkPath(link: EntryLink): string {
+  if (link.kind === "work") {
+    return link.workType === "screen" ? ROUTES.movies : animePath(link.id);
+  }
   const base =
     link.kind === "place"
       ? ROUTES.places
@@ -1520,7 +1526,7 @@ function EntryCard({
           )}
           <div>
             <h3>{entry.title}</h3>
-            <p>{entry.bodySummary}</p>
+            <p>{replaceStickerCodes(entry.bodySummary)}</p>
           </div>
           {entry.score !== null ? (
             <div className="score-orb">
@@ -1829,7 +1835,7 @@ function AnimeLibraryPage({
             </p>
           </div>
           <div className="select-controls">
-            <AnimeSelect
+            <Select
               className="library-select"
               label="观看状态"
               value={statusFilter}
@@ -1849,7 +1855,7 @@ function AnimeLibraryPage({
                 ["dropped", "已弃"],
               ]}
             />
-            <AnimeSelect
+            <Select
               className="library-select"
               label="排序"
               value={sort}
@@ -2294,7 +2300,7 @@ function AnimeDetailPage({
                   <StatusBadge visibility={entry.visibility} />
                 </div>
                 <strong>{entry.score?.toFixed(1) ?? "—"}</strong>
-                <p>{entry.bodySummary}</p>
+                <p>{replaceStickerCodes(entry.bodySummary)}</p>
                 <time>{formatEntryOccurredAt(entry)}</time>
               </button>
             ))
@@ -2307,6 +2313,13 @@ function AnimeDetailPage({
           )}
         </div>
       </section>
+
+      <RelatedEntries
+        kind="work"
+        id={work.id}
+        onOpenEntry={(id) => navigate(entryPath(id))}
+        emptyText="还没有关联到这部作品的心情或想法。让 Agent 记的时候带上 aboutId 就会出现在这里。"
+      />
     </div>
   );
 }
@@ -2464,7 +2477,7 @@ function EntryDetailPage({
             {SOURCE_LABELS[entry.sourceChannel]}
           </span>
         </div>
-        <blockquote>{entry.bodyRaw}</blockquote>
+        <blockquote>{replaceStickerCodes(entry.bodyRaw)}</blockquote>
         <EntryAttachments entry={entry} timeZone={currentTimeZone()} />
         <div className="raw-source-footer">
           <span>
@@ -2898,166 +2911,6 @@ function SearchPage({ entries, works, navigate }: SearchPageProps) {
   );
 }
 
-interface AnimeSelectProps {
-  label: string;
-  value: string;
-  options: readonly (readonly [string, string])[];
-  onChange: (value: string) => void;
-  className?: string;
-  disabled?: boolean;
-  hideLabel?: boolean;
-}
-
-function AnimeSelect({
-  label,
-  value,
-  options,
-  onChange,
-  className = "",
-  disabled = false,
-  hideLabel = false,
-}: AnimeSelectProps) {
-  const [open, setOpen] = useState(false);
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex(([optionValue]) => optionValue === value),
-  );
-  const [activeIndex, setActiveIndex] = useState(selectedIndex);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const reactId = useId().replaceAll(":", "");
-  const labelId = `anime-select-label-${reactId}`;
-  const valueId = `anime-select-value-${reactId}`;
-  const listboxId = `anime-select-listbox-${reactId}`;
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setActiveIndex(selectedIndex);
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !rootRef.current?.contains(event.target)
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () =>
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [open, selectedIndex]);
-
-  const commit = (index: number) => {
-    const option = options[index];
-    if (!option) {
-      return;
-    }
-    onChange(option[0]);
-    setOpen(false);
-  };
-
-  const handleKeys = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (disabled) {
-      return;
-    }
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      const direction = event.key === "ArrowDown" ? 1 : -1;
-      if (!open) {
-        setOpen(true);
-        setActiveIndex(selectedIndex);
-        return;
-      }
-      setActiveIndex(
-        (index) => (index + direction + options.length) % options.length,
-      );
-      return;
-    }
-    if (event.key === "Home" || event.key === "End") {
-      event.preventDefault();
-      setOpen(true);
-      setActiveIndex(event.key === "Home" ? 0 : options.length - 1);
-      return;
-    }
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      if (open) {
-        commit(activeIndex);
-      } else {
-        setOpen(true);
-      }
-      return;
-    }
-    if (event.key === "Escape" && open) {
-      event.preventDefault();
-      setOpen(false);
-    }
-  };
-
-  const selectedLabel = options[selectedIndex]?.[1] ?? "请选择";
-
-  return (
-    <div
-      className={`anime-select ${open ? "is-open" : ""} ${className}`.trim()}
-      ref={rootRef}
-    >
-      <span
-        className={hideLabel ? "anime-select-label sr-only" : "anime-select-label"}
-        id={labelId}
-      >
-        {label}
-      </span>
-      <button
-        className="anime-select-trigger"
-        type="button"
-        role="combobox"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={listboxId}
-        aria-labelledby={`${labelId} ${valueId}`}
-        aria-activedescendant={
-          open ? `${listboxId}-option-${activeIndex}` : undefined
-        }
-        disabled={disabled}
-        onClick={() => setOpen((shown) => !shown)}
-        onKeyDown={handleKeys}
-      >
-        <span id={valueId}>{selectedLabel}</span>
-        <ChevronDown aria-hidden="true" size={15} />
-      </button>
-      {open ? (
-        <div className="anime-select-menu" id={listboxId} role="listbox">
-          {options.map(([optionValue, optionLabel], index) => (
-            <button
-              className={[
-                "anime-select-option",
-                index === activeIndex ? "is-active" : "",
-                optionValue === value ? "is-selected" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              id={`${listboxId}-option-${index}`}
-              key={optionValue}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              aria-selected={optionValue === value}
-              onMouseEnter={() => setActiveIndex(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => commit(index)}
-            >
-              <span>{optionLabel}</span>
-              {optionValue === value ? (
-                <Check aria-hidden="true" size={14} />
-              ) : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 interface SearchSelectProps {
   label: string;
   value: string;
@@ -3067,7 +2920,7 @@ interface SearchSelectProps {
 
 function SearchSelect({ label, value, options, onChange }: SearchSelectProps) {
   return (
-    <AnimeSelect
+    <Select
       className="search-select"
       label={label}
       value={value}
@@ -3602,7 +3455,7 @@ function TrashPage({
               >
                 <span className="tiny-label">{TYPE_LABELS[entry.type]} · {formatEntryOccurredAt(entry)}</span>
                 <strong>{entry.title}</strong>
-                <p>{entry.bodySummary}</p>
+                <p>{replaceStickerCodes(entry.bodySummary)}</p>
               </button>
               <div className="trash-actions">
                 <button
@@ -3686,7 +3539,7 @@ function SettingsPage({
                 <strong>用户时区</strong>
                 <span>按此时区分组日期；数据库仍统一保存 UTC。</span>
               </div>
-              <AnimeSelect
+              <Select
                 className="settings-select"
                 label="选择用户时区"
                 hideLabel
@@ -4172,7 +4025,7 @@ function QuickCaptureDialog({
             <div className="anime-rating-fields">
               <div className="form-grid-two capture-anime-topline">
                 {works.length ? (
-                  <AnimeSelect
+                  <Select
                     className="capture-select"
                     label="关联作品"
                     value={draft.workId}
@@ -4554,7 +4407,7 @@ function PublishDialog({
           <div>
             <span>{work?.title ?? TYPE_LABELS[entry.type]}</span>
             <h3>{entry.title}</h3>
-            <p>{entry.bodySummary}</p>
+            <p>{replaceStickerCodes(entry.bodySummary)}</p>
             <div>
               {entry.score !== null ? (
                 <strong>{entry.score.toFixed(1)} / 10</strong>

@@ -39,6 +39,7 @@ import {
 } from "./api";
 import { prepareMediaFile } from "./media-prep";
 import { RelatedEntries } from "./RelatedEntries";
+import { Select } from "./Select";
 import type { ToastMessage } from "./models";
 import type { NewPost } from "./TimelineFeed";
 import "./shelf.css";
@@ -78,7 +79,7 @@ const COPY: Record<ShelfKind, KindCopy> = {
     excerpt: "摘抄",
     excerptPlaceholder: "划下来的那句话…",
     locationPlaceholder: "页码 / 章节",
-    empty: "书架还是空的。添加第一本书，或者让 Agent 用 create_shelf_item 帮你录入。",
+    empty: "书架还是空的。添加第一本书，或者让 Agent 用 save_shelf_item 帮你录入。",
     feedTag: "读书",
   },
   music: {
@@ -105,6 +106,12 @@ const COPY: Record<ShelfKind, KindCopy> = {
 const STATUS_ORDER: readonly ShelfStatus[] = ["in_progress", "done", "planned", "dropped"];
 
 type SortKey = "recent" | "rating" | "title";
+
+const SORT_OPTIONS: readonly (readonly [SortKey, string])[] = [
+  ["recent", "最近"],
+  ["rating", "评分最高"],
+  ["title", "按名称"],
+];
 
 function itemDate(item: ShelfItem): string {
   return item.finishedOn ?? item.startedOn ?? item.createdAt.slice(0, 10);
@@ -198,7 +205,6 @@ export function ShelfPage({ kind, focusId, onOpenEntry, onCreatePost, pushToast 
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<ShelfItem | "new" | null>(null);
   const searchId = useId();
-  const sortId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -351,18 +357,16 @@ export function ShelfPage({ kind, focusId, onOpenEntry, onCreatePost, pushToast 
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <label className="sh-sort" htmlFor={sortId}>
-            <span className="sr-only">排序</span>
-            <select
-              id={sortId}
-              value={sort}
-              onChange={(event) => setSort(event.target.value as SortKey)}
-            >
-              <option value="recent">最近</option>
-              <option value="rating">评分最高</option>
-              <option value="title">按名称</option>
-            </select>
-          </label>
+          <Select
+            className="sh-sort"
+            label="排序"
+            hideLabel
+            variant="soft"
+            shape="pill"
+            value={sort}
+            options={SORT_OPTIONS}
+            onChange={(value) => setSort(value as SortKey)}
+          />
         </div>
       </div>
 
@@ -855,21 +859,14 @@ function ShelfEditor({
                   onChange={(event) => setCreator(event.target.value)}
                 />
               </div>
-              <div>
-                <label htmlFor={ids.format}>形式</label>
-                <select
-                  id={ids.format}
-                  value={format}
-                  onChange={(event) => setFormat(event.target.value as ShelfFormat | "")}
-                >
-                  <option value="">不填</option>
-                  {copy.formats.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                className="sh-field-select"
+                label="形式"
+                variant="soft"
+                value={format}
+                options={[["", "不填"], ...copy.formats]}
+                onChange={(value) => setFormat(value as ShelfFormat | "")}
+              />
             </div>
 
             <span className="sh-label">状态</span>

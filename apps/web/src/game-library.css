@@ -198,25 +198,13 @@
   font-size: 14px;
 }
 
-.gl-sort select {
-  min-height: 40px;
-  padding: 0 34px 0 14px;
-  border: 1px solid var(--gl-line);
-  border-radius: 999px;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b6470' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
-      right 13px center / 12px no-repeat,
-    var(--gl-card);
-  color: var(--gl-ink);
-  font-size: 14px;
-  appearance: none;
-  cursor: pointer;
-}
-
-.gl-sort select:focus-visible {
-  border-color: var(--gl-accent);
-  outline: none;
-  box-shadow: 0 0 0 3px var(--gl-accent-soft);
+.gl-sort {
+  --select-accent: var(--gl-accent);
+  --select-accent-soft: var(--gl-accent-soft);
+  --select-line: var(--gl-line);
+  --select-ink: var(--gl-ink);
+  --select-card: var(--gl-card);
+  z-index: 20;
 }
 
 /* Grid -------------------------------------------------------------------- */

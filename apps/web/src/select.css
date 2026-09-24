@@ -1,0 +1,104 @@
+/* "soft" look for the shared Select: rounded, white, tinted by the page accent.
+   Pages set --select-accent / --select-accent-soft (and optionally ink/line). */
+
+.anime-select.is-soft {
+  gap: 6px;
+}
+
+.anime-select.is-soft .anime-select-label {
+  color: var(--select-sub, #5b6470);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.anime-select.is-soft .anime-select-trigger {
+  min-height: 40px;
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--select-line, #e3e6ea);
+  border-radius: 10px;
+  background: var(--select-card, #ffffff);
+  color: var(--select-ink, #14171d);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.anime-select.is-soft.is-pill .anime-select-trigger {
+  min-width: 132px;
+  border-radius: 999px;
+}
+
+.anime-select.is-soft .anime-select-trigger svg {
+  color: var(--select-sub, #5b6470);
+}
+
+.anime-select.is-soft .anime-select-trigger:hover {
+  border-color: color-mix(in srgb, var(--select-accent, #2456c9) 45%, var(--select-line, #e3e6ea));
+}
+
+.anime-select.is-soft .anime-select-trigger:focus-visible,
+.anime-select.is-soft.is-open .anime-select-trigger {
+  border-color: var(--select-accent, #2456c9);
+  outline: none;
+  background: var(--select-card, #ffffff);
+  box-shadow: 0 0 0 3px var(--select-accent-soft, #e9effb);
+}
+
+.anime-select.is-soft .anime-select-menu {
+  top: calc(100% + 6px);
+  left: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(320px, 90vw);
+  padding: 6px;
+  border: 1px solid var(--select-line, #e3e6ea);
+  border-radius: 14px;
+  background: var(--select-card, #ffffff);
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 6%),
+    0 16px 40px rgb(15 23 42 / 14%);
+}
+
+.anime-select.is-soft.is-field .anime-select-menu {
+  left: 0;
+  width: auto;
+  max-width: none;
+}
+
+.anime-select.is-soft .anime-select-option {
+  min-height: 36px;
+  gap: 16px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 9px;
+  color: var(--select-ink, #14171d);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.anime-select.is-soft .anime-select-option.is-active {
+  background: var(--select-accent-soft, #e9effb);
+  color: var(--select-ink, #14171d);
+}
+
+.anime-select.is-soft .anime-select-option.is-selected {
+  background: transparent;
+  color: var(--select-accent, #2456c9);
+  font-weight: 650;
+}
+
+.anime-select.is-soft .anime-select-option.is-selected.is-active {
+  background: var(--select-accent-soft, #e9effb);
+}
+
+.anime-select.is-soft .anime-select-option svg {
+  color: var(--select-accent, #2456c9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anime-select-menu {
+    animation: none;
+  }
+}

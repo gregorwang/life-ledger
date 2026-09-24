@@ -34,10 +34,12 @@
 .feed-layout {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 620px) 320px;
+  /* The feed grows with the screen (620 → 800px) so wide monitors are not
+     mostly empty margin; the rail follows at a gentler rate. */
+  grid-template-columns: minmax(0, clamp(620px, 46vw, 800px)) clamp(300px, 19vw, 360px);
   justify-content: center;
   align-items: start;
-  gap: 28px;
+  gap: clamp(24px, 2vw, 36px);
 }
 
 .feed-column {
@@ -1004,12 +1006,12 @@
 
 .feed-media-pair {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: 440px;
+  max-width: 520px;
 }
 
 .feed-media-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  max-width: 480px;
+  max-width: 560px;
 }
 
 .feed-media-item {
@@ -1028,7 +1030,7 @@
 }
 
 .feed-media-single .feed-media-item:not(.is-video) {
-  max-width: min(100%, 420px);
+  max-width: min(100%, 520px);
 }
 
 .feed-media-item img,

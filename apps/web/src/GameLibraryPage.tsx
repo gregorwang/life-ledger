@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 
 import { loadGameLibrary } from "./api";
 import { RelatedEntries } from "./RelatedEntries";
+import { Select } from "./Select";
 import "./game-library.css";
 
 type GameFilter = "all" | "completed" | "playing";
@@ -117,7 +118,6 @@ export function GameLibraryPage({
     "loading",
   );
   const searchId = useId();
-  const sortId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -227,20 +227,16 @@ export function GameLibraryPage({
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <label className="gl-sort" htmlFor={sortId}>
-            <span className="sr-only">排序</span>
-            <select
-              id={sortId}
-              value={sort}
-              onChange={(event) => setSort(event.target.value as GameSort)}
-            >
-              {SORTS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select
+            className="gl-sort"
+            label="排序"
+            hideLabel
+            variant="soft"
+            shape="pill"
+            value={sort}
+            options={SORTS}
+            onChange={(value) => setSort(value as GameSort)}
+          />
         </div>
       </div>
 

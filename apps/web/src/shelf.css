@@ -248,20 +248,21 @@
   font-size: 14px;
 }
 
-.sh-sort select,
-.sh-fields select {
-  min-height: 40px;
-  padding: 0 34px 0 14px;
-  border: 1px solid var(--sh-line);
-  border-radius: 999px;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b6470' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
-      right 13px center / 12px no-repeat,
-    var(--sh-card);
-  color: var(--sh-ink);
-  font-size: 14px;
-  appearance: none;
-  cursor: pointer;
+.sh-sort,
+.sh-field-select {
+  --select-accent: var(--sh-accent);
+  --select-accent-soft: var(--sh-accent-soft);
+  --select-line: var(--sh-line);
+  --select-ink: var(--sh-ink);
+  --select-card: var(--sh-card);
+}
+
+.sh-sort {
+  z-index: 20;
+}
+
+.sh-field-select .anime-select-label {
+  margin-top: 8px;
 }
 
 /* Grid -------------------------------------------------------------------- */
@@ -732,8 +733,7 @@
 .sh-excerpt-form textarea:focus,
 .sh-excerpt-form input:focus,
 .sh-fields input:focus,
-.sh-fields textarea:focus,
-.sh-fields select:focus {
+.sh-fields textarea:focus {
   border-color: var(--sh-accent);
   outline: 2px solid var(--sh-accent-soft);
 }
@@ -852,11 +852,6 @@
   min-width: 0;
   flex-direction: column;
   gap: 6px;
-}
-
-.sh-fields select {
-  width: 100%;
-  border-radius: 10px;
 }
 
 .sh-segment {

@@ -14,6 +14,7 @@ import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "rea
 import { createPlace, deletePlace, loadPlaces, updatePlace } from "./api";
 import type { ToastMessage } from "./models";
 import { RelatedEntries } from "./RelatedEntries";
+import { Select } from "./Select";
 import { ShelfDialog, splitTags, uploadCoverImage } from "./ShelfPage";
 import type { NewPost } from "./TimelineFeed";
 import "./shelf.css";
@@ -370,7 +371,6 @@ function PlaceEditor({
     name: useId(),
     city: useId(),
     country: useId(),
-    category: useId(),
     trip: useId(),
     visited: useId(),
     left: useId(),
@@ -491,20 +491,14 @@ function PlaceEditor({
               </div>
             </div>
             <div className="sh-field-row">
-              <div>
-                <label htmlFor={ids.category}>类型</label>
-                <select
-                  id={ids.category}
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value as PlaceCategory)}
-                >
-                  {CATEGORIES.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                className="sh-field-select"
+                label="类型"
+                variant="soft"
+                value={category}
+                options={CATEGORIES}
+                onChange={(value) => setCategory(value as PlaceCategory)}
+              />
               <div>
                 <label htmlFor={ids.trip}>属于哪次旅行</label>
                 <input
