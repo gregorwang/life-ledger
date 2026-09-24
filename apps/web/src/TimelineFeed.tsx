@@ -46,6 +46,7 @@ import { createPortal } from "react-dom";
 import {
   MOOD_PRESETS,
   moodFromTags,
+  replaceStickerCodes,
   withMoodTag,
   type EntryLink,
   type EntryLinkInput,
@@ -315,7 +316,7 @@ export function EntryAttachments({
                   {SOURCE_LABELS[followUp.sourceChannel]}
                 </span>
               </div>
-              <p>{followUp.body}</p>
+              <p>{replaceStickerCodes(followUp.body)}</p>
             </li>
           ))}
         </ol>
@@ -872,7 +873,7 @@ function FeedPost({
         </header>
         {hideBody ? null : (
           <div className={longBody && !expanded ? "feed-post-body is-clamped" : "feed-post-body"}>
-            <p>{entry.bodyRaw}</p>
+            <p>{replaceStickerCodes(entry.bodyRaw)}</p>
           </div>
         )}
         {longBody && !hideBody ? (
@@ -919,7 +920,7 @@ function FeedPost({
                     <X aria-hidden="true" size={13} />
                   </button>
                 </div>
-                <p>{followUp.body}</p>
+                <p>{replaceStickerCodes(followUp.body)}</p>
               </li>
             ))}
           </ol>
@@ -1185,13 +1186,23 @@ const LINK_LABELS = {
   music: { label: "音乐", icon: Music2 },
   place: { label: "足迹", icon: MapPin },
   game: { label: "游戏", icon: Gamepad2 },
+  anime: { label: "番剧", icon: Tv },
+  screen: { label: "影视", icon: Clapperboard },
 } as const;
 
-/** The book, record, place or game a post is about. */
+/** The book, record, place, game or show a post is about. */
 function LinkCard({ link, onOpen }: { link: EntryLink; onOpen: () => void }) {
   const [failed, setFailed] = useState(false);
   const flavor =
-    link.kind === "shelf" ? (link.shelfKind === "music" ? "music" : "book") : link.kind;
+    link.kind === "shelf"
+      ? link.shelfKind === "music"
+        ? "music"
+        : "book"
+      : link.kind === "work"
+        ? link.workType === "screen"
+          ? "screen"
+          : "anime"
+        : link.kind;
   const { label, icon: Icon } = LINK_LABELS[flavor];
   return (
     <button type="button" className={`feed-link-card is-${flavor}`} onClick={onOpen}>
@@ -1936,7 +1947,7 @@ function OnThisDay({
                 </span>
                 <span className="feed-on-this-day-text">
                   {mood ? <span aria-hidden="true">{mood} </span> : null}
-                  {isMediaOnlyBody(entry) ? "（照片 / 视频）" : entry.bodyRaw}
+                  {isMediaOnlyBody(entry) ? "（照片 / 视频）" : replaceStickerCodes(entry.bodyRaw)}
                 </span>
                 {entry.media[0]?.kind === "image" ? (
                   <img src={entry.media[0].url} alt="" loading="lazy" decoding="async" />

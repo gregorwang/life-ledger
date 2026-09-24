@@ -9,6 +9,8 @@ import {
   listMediaWorksInputSchema,
   logMediaInputSchema,
   moodFromTags,
+  normalizeMood,
+  replaceStickerCodes,
   normalizeMediaTitle,
   profileSchema,
   createShelfItemInputSchema,
@@ -330,5 +332,29 @@ describe("Life Ledger contracts", () => {
       }).coverUrl,
     ).toContain("/media/");
     expect(() => updateShelfItemInputSchema.parse({ versionNo: 1 })).toThrow();
+  });
+});
+
+describe("sticker codes", () => {
+  it("turns WeChat sticker codes into emoji and leaves other brackets alone", () => {
+    expect(replaceStickerCodes("respect！[加油]看看后面[捂脸]")).toBe("respect！💪看看后面🤦");
+    expect(replaceStickerCodes("第[3]集 [不存在的表情] [a b]")).toBe("第[3]集 [不存在的表情] [a b]");
+  });
+
+  it("normalises moods given as stickers or preset names", () => {
+    expect(normalizeMood("[流泪]")).toBe("😢");
+    expect(normalizeMood("平静")).toBe("😌");
+    expect(normalizeMood(" 🥹 ")).toBe("🥹");
+  });
+
+  it("keeps the mood on media logs", () => {
+    const parsed = logMediaInputSchema.parse({
+      rawText: "看完了",
+      title: "作品",
+      occurredAt: "2026-09-24T08:00:00Z",
+      source: { channel: "mcp", messageId: "m1", conversationId: null },
+      mood: "🥹",
+    });
+    expect(parsed.mood).toBe("🥹");
   });
 });

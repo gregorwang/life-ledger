@@ -66,6 +66,11 @@ describe("shelf_items schema", () => {
     expect(() =>
       database.exec(`INSERT INTO entry_links VALUES ('ent_1', 'user_primary', 'movie', 'x', 'now')`),
     ).toThrow();
+    database.exec(`
+      INSERT INTO entry_links (entry_id, user_id, target_kind, target_id, created_at)
+      VALUES ('ent_1', 'user_primary', 'work', 'work_1', '2026-09-24T00:00:00Z');
+    `);
+    expect(database.prepare("SELECT count(*) AS n FROM entry_links").get()).toEqual({ n: 2 });
     database.exec("DELETE FROM entries WHERE id = 'ent_1'");
     expect(database.prepare("SELECT count(*) AS n FROM entry_links").get()).toEqual({ n: 0 });
   });

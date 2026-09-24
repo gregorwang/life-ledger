@@ -1,4 +1,4 @@
-import { moodFromTags, type EntryLinkKind } from "@life-ledger/contracts";
+import { moodFromTags, replaceStickerCodes, type EntryLinkKind } from "@life-ledger/contracts";
 import { MessageSquareText } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -6,7 +6,7 @@ import { loadLinkedEntries } from "./api";
 import type { LedgerEntry } from "./models";
 import "./related.css";
 
-/** Every 日常 post linked to one book, record, place or game. */
+/** Every 日常 post linked to one book, record, place, game or show. */
 export function RelatedEntries({
   kind,
   id,
@@ -56,7 +56,7 @@ export function RelatedEntries({
                   </time>
                   <span>
                     {mood ? `${mood} ` : ""}
-                    {entry.bodyRaw}
+                    {replaceStickerCodes(entry.bodyRaw)}
                   </span>
                 </button>
               </li>

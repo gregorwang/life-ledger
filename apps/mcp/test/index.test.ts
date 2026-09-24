@@ -255,7 +255,14 @@ describe("Life Ledger MCP 工具契约", () => {
         arguments: { rawText: "x", aboutId: "ent_1" },
       });
       expect(JSON.parse(responseText(bad)).error.code).toBe("INVALID_ABOUT_ID");
+      await client.callTool({
+        name: "capture_entry",
+        arguments: { rawText: "最后一集哭死", aboutId: "work_1", mood: "感动" },
+      });
     });
+    expect(captureEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ links: [{ kind: "work", id: "work_1" }], mood: "🥲" }),
+    );
     expect(captureEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         links: [{ kind: "place", id: "place_1" }],
@@ -482,6 +489,7 @@ describe("Life Ledger MCP 工具契约", () => {
           timezone: "Asia/Tokyo",
           sourceChannel: "mcp",
           idempotencyKey: "mcp-screen-movie-001",
+          mood: "[流泪]",
         },
       });
     });
@@ -491,6 +499,7 @@ describe("Life Ledger MCP 工具契约", () => {
         mediaType: "screen",
         mediaKind: "movie",
         title: "沙丘2",
+        mood: "😢",
         source: {
           channel: "mcp",
           messageId: "mcp-screen-movie-001",

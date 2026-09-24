@@ -64,3 +64,7 @@
   color: #8a919c;
   font-size: 13px;
 }
+
+.anime-detail-page > .related-entries {
+  margin-top: 32px;
+}

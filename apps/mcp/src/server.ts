@@ -14,6 +14,7 @@ import {
   ledgerStatsInputSchema,
   listEntriesInputSchema,
   listMediaWorksInputSchema,
+  normalizeMood,
   listTagsInputSchema,
   logMediaInputSchema,
   mediaKindSchema,
@@ -97,8 +98,8 @@ export type McpCoreBinding = Pick<
  */
 const SERVER_INSTRUCTIONS = `Life Ledger 是用户的私人人生账本，所有内容默认仅自己可见。
 怎么选工具：
-- 记一句话、想法、心情、照片 → capture_entry
-- 看了番剧/电影/电视剧 → log_media
+- 记一句话、想法、心情、照片 → capture_entry（心情放 mood；聊的是某部作品/书/游戏就把它的 id 放 aboutId）
+- 看了番剧/电影/电视剧 → log_media（有评分、集数；当时的心情也可以放 mood）
 - 书或音乐（专辑/单曲/歌单）→ save_shelf_item
 - 去了某个地方 → save_place
 - 玩游戏 → save_game
@@ -158,20 +159,19 @@ const sourceFields = {
   conversationId: idSchema.nullable().default(null),
 };
 
+const moodDescription =
+  "心情表情，一个 emoji，例如 😄 开心、😌 平静、😢 难过、😰 焦虑、🥹 感动；微信表情 [加油] [流泪] 这类也能传，会自动换成 emoji";
+
+const moodField = z.string().trim().min(1).max(16).optional().describe(moodDescription);
+
 const captureEntryToolSchema = z.object({
   rawText: z.string().trim().min(1).max(50_000).describe("用户原话，原样保存，可以带 emoji"),
   type: z.enum(["thought", "idea", "mood", "note"]).default("note"),
-  mood: z
-    .string()
-    .trim()
-    .min(1)
-    .max(16)
-    .optional()
-    .describe("心情表情，例如 😄 开心、😌 平静、😢 难过、😰 焦虑；传了就记为心情"),
+  mood: moodField,
   tags: tagsField.default([]),
   aboutId: idSchema
     .optional()
-    .describe("可选：这条动态说的是哪本书/哪首歌/哪个地方/哪个游戏的 id，会显示成卡片"),
+    .describe("可选：这条动态说的是哪本书/哪首歌/哪个地方/哪个游戏/哪部番剧影视的 id，会显示成卡片"),
   mediaIds: mediaIdsField,
   occurredAt: z.iso
     .datetime({ offset: true })
@@ -194,6 +194,7 @@ const logMediaToolSchema = z.object({
   episodeLabel: z.string().trim().min(1).max(80).nullable().default(null).describe("例如 第4集"),
   progressState: mediaWatchStatusSchema.nullable().default(null),
   comment: z.string().trim().max(50_000).nullable().default(null),
+  mood: moodField,
   aliases: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
   mediaIds: mediaIdsField,
   occurredAt: z.iso.datetime({ offset: true }).optional(),
@@ -349,10 +350,10 @@ function kindOfId(id: string): "entry" | "shelf" | "place" | "game" | "work" | "
 
 function linkFor(id: string): EntryLinkInput {
   const kind = kindOfId(id);
-  if (kind !== "shelf" && kind !== "place" && kind !== "game") {
+  if (kind !== "shelf" && kind !== "place" && kind !== "game" && kind !== "work") {
     throw domainError(
       "INVALID_ABOUT_ID",
-      "aboutId 只能是书、音乐、地点或游戏的 id（book_ / music_ / place_ / game_ 开头）。",
+      "aboutId 只能是书、音乐、地点、游戏或番剧影视的 id（book_ / music_ / place_ / game_ / work_ 开头）。",
     );
   }
   return { kind, id };
@@ -516,7 +517,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "记一条日常",
       description:
-        "记一句话、想法、心情或照片，出现在网页「日常」里，默认仅自己可见。心情用 mood 传一个表情；说的是某本书/歌/地点/游戏时，把它的 id 放进 aboutId。",
+        "记一句话、想法、心情或照片，出现在网页「日常」里，默认仅自己可见。心情用 mood 传一个表情；说的是某本书/歌/地点/游戏/番剧影视时，把它的 id 放进 aboutId（不知道 id 先 search_all）。",
       inputSchema: captureEntryToolSchema,
       annotations: { ...safeWriteAnnotations, idempotentHint: true },
     },
@@ -543,7 +544,7 @@ export function createServer(core: McpCoreBinding): McpServer {
               },
               visibility: "private",
               mediaIds: input.mediaIds,
-              ...(input.mood ? { mood: input.mood } : {}),
+              ...(input.mood ? { mood: normalizeMood(input.mood) } : {}),
               ...(input.aboutId ? { links: [linkFor(input.aboutId)] } : {}),
             }),
           );
@@ -561,7 +562,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "记一次看番/看剧/看电影",
       description:
-        "记录看了什么番剧或电影电视剧，可带集数、季、评分和评论；作品不存在会自动创建。电影电视剧用 mediaType=screen。",
+        "记录看了什么番剧或电影电视剧，可带集数、季、评分和评论；作品不存在会自动创建。电影电视剧用 mediaType=screen。用户提到当时的心情就用 mood 传一个表情。",
       inputSchema: logMediaToolSchema,
       annotations: { ...safeWriteAnnotations, idempotentHint: true },
     },
@@ -595,6 +596,7 @@ export function createServer(core: McpCoreBinding): McpServer {
               },
               visibility: "private",
               mediaIds: input.mediaIds,
+              ...(input.mood ? { mood: normalizeMood(input.mood) } : {}),
             }),
           );
         } catch (error: unknown) {
@@ -949,7 +951,7 @@ export function createServer(core: McpCoreBinding): McpServer {
           case "game":
             return { item: await core.getGameLibraryItem(id), relatedEntries: await core.listLinkedEntries("game", id) };
           case "work":
-            return core.getMediaWork(id);
+            return { item: await core.getMediaWork(id), relatedEntries: await core.listLinkedEntries("work", id) };
           default:
             throw domainError("UNKNOWN_ID", `认不出 ${id} 是什么，先用 search_all 查 id。`);
         }

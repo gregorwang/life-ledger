@@ -360,12 +360,15 @@ interface LinkRow {
   cover_url: string | null;
   rating: number | null;
   shelf_kind: ShelfItem["kind"] | null;
+  work_type: "anime" | "screen" | null;
 }
 
-const LINK_TABLES: Record<EntryLinkKind, string> = {
-  shelf: "shelf_items",
-  place: "places",
-  game: "game_library_items",
+/** Existence check per link kind; media works are hard-deleted, so no status filter. */
+const LINK_TARGET_CHECKS: Record<EntryLinkKind, string> = {
+  shelf: "SELECT 1 AS ok FROM shelf_items WHERE id = ? AND user_id = ? AND status = 'active'",
+  place: "SELECT 1 AS ok FROM places WHERE id = ? AND user_id = ? AND status = 'active'",
+  game: "SELECT 1 AS ok FROM game_library_items WHERE id = ? AND user_id = ? AND status = 'active'",
+  work: "SELECT 1 AS ok FROM media_works WHERE id = ? AND user_id = ? AND media_type IN ('anime', 'screen')",
 };
 
 interface PlaceRow {
@@ -2597,10 +2600,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
 
   async #assertLinkTargets(links: EntryLinkInput[]): Promise<void> {
     for (const link of links) {
-      const table = LINK_TABLES[link.kind];
-      const row = await this.env.DB.prepare(`
-        SELECT 1 AS ok FROM ${table} WHERE id = ? AND user_id = ? AND status = 'active'
-      `)
+      const row = await this.env.DB.prepare(LINK_TARGET_CHECKS[link.kind])
         .bind(link.id, USER_ID)
         .first<{ ok: number }>();
       if (!row) {
@@ -3002,7 +3002,12 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         parsed.source.messageId,
         parsed.source.conversationId,
         requestHash,
-        JSON.stringify([parsed.mediaType, parsed.ratingScope].filter(Boolean)),
+        JSON.stringify(
+          withMoodTag(
+            [parsed.mediaType, parsed.ratingScope].filter((tag) => tag !== null),
+            parsed.mood ?? null,
+          ),
+        ),
         createdAt,
         createdAt,
       ),
@@ -5397,15 +5402,17 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       `).bind(USER_ID, ids),
       this.env.DB.prepare(`
         SELECT l.entry_id, l.target_kind, l.target_id,
-          coalesce(s.title, p.name, g.title) AS title,
+          coalesce(s.title, p.name, g.title, w.canonical_title) AS title,
           CASE l.target_kind
             WHEN 'shelf' THEN s.creator
             WHEN 'place' THEN nullif(trim(coalesce(p.city, '') || ' ' || coalesce(p.country, '')), '')
+            WHEN 'work' THEN CASE w.media_kind WHEN 'movie' THEN '电影' WHEN 'tv' THEN '剧集' END
             ELSE g.platform
           END AS subtitle,
-          coalesce(s.cover_url, p.cover_url, g.cover_url) AS cover_url,
-          coalesce(s.rating, p.rating, g.rating) AS rating,
-          s.kind AS shelf_kind
+          coalesce(s.cover_url, p.cover_url, g.cover_url, w.cover_url) AS cover_url,
+          coalesce(s.rating, p.rating, g.rating, w.overall_score_100 / 10.0) AS rating,
+          s.kind AS shelf_kind,
+          w.media_type AS work_type
         FROM entry_links l
         LEFT JOIN shelf_items s
           ON l.target_kind = 'shelf' AND s.id = l.target_id AND s.status = 'active'
@@ -5413,6 +5420,8 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           ON l.target_kind = 'place' AND p.id = l.target_id AND p.status = 'active'
         LEFT JOIN game_library_items g
           ON l.target_kind = 'game' AND g.id = l.target_id AND g.status = 'active'
+        LEFT JOIN media_works w
+          ON l.target_kind = 'work' AND w.id = l.target_id AND w.user_id = l.user_id
         WHERE l.user_id = ? AND l.entry_id IN (SELECT value FROM json_each(?))
         ORDER BY l.entry_id, l.created_at
       `).bind(USER_ID, ids),
@@ -5443,6 +5452,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         coverUrl: row.cover_url,
         rating: row.rating === null ? null : Number(row.rating),
         shelfKind: row.shelf_kind,
+        workType: row.target_kind === "work" ? row.work_type : null,
       });
       linksByEntry.set(row.entry_id, list);
     }
