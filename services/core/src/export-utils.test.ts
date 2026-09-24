@@ -37,8 +37,8 @@ describe("portable export utilities", () => {
     expect(sql).toContain(
       `INSERT INTO "entries" ("id", "body_raw") VALUES ('entry_1', 'don''t rewrite 原文');`,
     );
-    expect(sql).toContain("BEGIN TRANSACTION;");
-    expect(sql).toContain("COMMIT;");
+    expect(sql).toContain("PRAGMA defer_foreign_keys = true;");
+    expect(sql).not.toContain("BEGIN TRANSACTION;");
   });
 
   it("creates gzip payloads and stable SHA-256 checksums", async () => {

@@ -25,6 +25,9 @@ import {
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
   addShelfExcerptInputSchema,
+  createPlaceInputSchema,
+  listPlacesInputSchema,
+  updatePlaceInputSchema,
   createShelfItemInputSchema,
   listShelfItemsInputSchema,
   updateShelfItemInputSchema,
@@ -59,6 +62,11 @@ export type McpCoreBinding = Pick<
   | "addShelfExcerpt"
   | "deleteShelfItem"
   | "restoreShelfItem"
+  | "listPlaces"
+  | "createPlace"
+  | "updatePlace"
+  | "deletePlace"
+  | "restorePlace"
   | "listSeasons"
   | "createSeason"
   | "updateSeason"
@@ -279,6 +287,17 @@ const addShelfExcerptToolSchema = addShelfExcerptInputSchema.safeExtend(
 );
 
 const mutateShelfItemToolSchema = shelfItemIdSchema.extend({
+  versionNo: z.number().int().positive(),
+  confirm: z.literal(true),
+});
+
+const placeIdSchema = z.object({
+  placeId: idSchema.describe("足迹条目 id（place_…）"),
+});
+
+const updatePlaceToolSchema = updatePlaceInputSchema.safeExtend(placeIdSchema.shape);
+
+const mutatePlaceToolSchema = placeIdSchema.extend({
   versionNo: z.number().int().positive(),
   confirm: z.literal(true),
 });
@@ -851,6 +870,69 @@ export function createServer(core: McpCoreBinding): McpServer {
     },
     ({ shelfItemId, versionNo }) =>
       toolResult(() => core.restoreShelfItem(shelfItemId, versionNo)),
+  );
+
+  server.registerTool(
+    "list_places",
+    {
+      title: "读取足迹",
+      description:
+        "读取去过的地方（城市、景点、餐厅、住处等），可按年份 year 或关键词（地名、城市、国家、旅行名）筛选；写入前先查，避免重复。",
+      inputSchema: listPlacesInputSchema,
+      annotations: readOnlyAnnotations,
+    },
+    (input) => toolResult(() => core.listPlaces(listPlacesInputSchema.parse(input))),
+  );
+
+  server.registerTool(
+    "create_place",
+    {
+      title: "记录一个去过的地方",
+      description:
+        "在「足迹」新增一个地点。visitedOn 必填（YYYY-MM-DD），leftOn 可选；category 取 city 城市 / sight 景点 / food 吃喝 / stay 住宿 / nature 自然 / event 活动 / other；trip 填同一次旅行的名字（如「2026 关西之旅」）以便分组；note 写原文感受。坐标 latitude/longitude 只有用户明确给出时才填，不要猜。",
+      inputSchema: createPlaceInputSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) => toolResult(() => core.createPlace(createPlaceInputSchema.parse(input))),
+  );
+
+  server.registerTool(
+    "update_place",
+    {
+      title: "更新足迹",
+      description: "用 versionNo 乐观锁更新一个地点，例如补充感受、评分或离开日期。",
+      inputSchema: updatePlaceToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ placeId, ...input }) =>
+      toolResult(() => core.updatePlace(placeId, updatePlaceInputSchema.parse(input))),
+  );
+
+  server.registerTool(
+    "delete_place",
+    {
+      title: "将足迹移入回收站",
+      description: "软删除一个地点，可恢复；必须提供当前 versionNo 并显式确认。",
+      inputSchema: mutatePlaceToolSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ placeId, versionNo }) => toolResult(() => core.deletePlace(placeId, versionNo)),
+  );
+
+  server.registerTool(
+    "restore_place",
+    {
+      title: "恢复足迹",
+      description: "从回收站恢复一个地点；必须提供当前 versionNo 并显式确认。",
+      inputSchema: mutatePlaceToolSchema,
+      annotations: safeWriteAnnotations,
+    },
+    ({ placeId, versionNo }) => toolResult(() => core.restorePlace(placeId, versionNo)),
   );
 
   server.registerTool(

@@ -16,6 +16,9 @@ import {
   settingsSchema,
   profileSchema,
   createShelfItemInputSchema,
+  createPlaceInputSchema,
+  listPlacesInputSchema,
+  updatePlaceInputSchema,
   listShelfItemsInputSchema,
   updateShelfItemInputSchema,
   updateEntryInputSchema,
@@ -25,6 +28,12 @@ import {
   type EntryMediaMimeType,
 } from "@life-ledger/contracts";
 
+import {
+  buildArchiveTextFiles,
+  isArchiveMediaKey,
+  listArchiveMedia,
+  type ArchiveManifest,
+} from "./archive";
 import {
   EntryMediaUploadError,
   isEntryMediaKey,
@@ -1213,6 +1222,97 @@ app.post("/api/v1/shelf/:id/restore", async (context) => {
   return context.json(
     await context.env.CORE.restoreShelfItem(context.req.param("id"), bodyVersionNo(body)),
   );
+});
+
+app.get("/api/v1/places", async (context) => {
+  const year = context.req.query("year");
+  const input = listPlacesInputSchema.parse({
+    query: context.req.query("query") ?? "",
+    year: year ? Number(year) : null,
+  });
+  return context.json({ items: await context.env.CORE.listPlaces(input) });
+});
+
+app.post("/api/v1/places", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.createPlace(createPlaceInputSchema.parse(body)),
+    201,
+  );
+});
+
+app.patch("/api/v1/places/:id", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.updatePlace(
+      context.req.param("id"),
+      updatePlaceInputSchema.parse(body),
+    ),
+  );
+});
+
+app.delete("/api/v1/places/:id", async (context) => {
+  const body: unknown = await context.req.json();
+  return context.json(
+    await context.env.CORE.deletePlace(context.req.param("id"), bodyVersionNo(body)),
+  );
+});
+
+app.get("/api/v1/review/:year", async (context) => {
+  return context.json(
+    await context.env.CORE.getYearReview(Number(context.req.param("year"))),
+  );
+});
+
+app.get("/api/v1/on-this-day", async (context) => {
+  return context.json(await context.env.CORE.getOnThisDay({ limit: 20 }));
+});
+
+// Local backup: the manifest carries all text files; media bytes are pulled
+// one object at a time so neither side ever holds the whole archive.
+app.get("/api/v1/archive/manifest", async (context) => {
+  const [snapshot, media] = await Promise.all([
+    context.env.CORE.getArchiveSnapshot(),
+    listArchiveMedia(context.env.MEDIA),
+  ]);
+  const files = buildArchiveTextFiles(snapshot, media.length);
+  const encoder = new TextEncoder();
+  const manifest: ArchiveManifest = {
+    format: "life-ledger-archive",
+    version: 1,
+    generatedAt: snapshot.generatedAt,
+    files,
+    media,
+    totalBytes:
+      files.reduce((total, file) => total + encoder.encode(file.content).byteLength, 0) +
+      media.reduce((total, file) => total + file.size, 0),
+  };
+  return context.json(manifest, 200, { "Cache-Control": "private, no-store" });
+});
+
+app.get("/api/v1/archive/media/*", async (context) => {
+  const raw = context.req.path.slice("/api/v1/archive/media/".length);
+  let key: string;
+  try {
+    key = raw.split("/").map(decodeURIComponent).join("/");
+  } catch {
+    key = "";
+  }
+  const object = isArchiveMediaKey(key) ? await context.env.MEDIA.get(key) : null;
+  if (!object) {
+    return context.json(
+      { error: { code: "ARCHIVE_MEDIA_NOT_FOUND", message: "Media object not found." } },
+      404,
+    );
+  }
+  return new Response(object.body, {
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Length": String(object.size),
+      "Content-Type": "application/octet-stream",
+      ETag: object.httpEtag,
+    },
+  });
 });
 
 app.get("/api/v1/entries/:id", async (context) => {

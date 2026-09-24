@@ -31,7 +31,7 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 
 ## 工具面
 
-共 48 个工具，`tools/list` 的标题和说明均为中文：
+共 53 个工具，`tools/list` 的标题和说明均为中文：
 
 - 服务：`health`
 - 记录：`get_entry`、`search_entries`、`get_recent_entries`、
@@ -45,6 +45,8 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
   `restore_game_library_item`
 - 书架与音乐：`list_shelf_items`、`create_shelf_item`、`update_shelf_item`、
   `add_shelf_excerpt`、`delete_shelf_item`、`restore_shelf_item`
+- 足迹：`list_places`、`create_place`、`update_place`、`delete_place`、
+  `restore_place`
 - 公开：`prepare_publish`、`confirm_action`、`unpublish_entry`
 - 动态照片/视频：`upload_entry_media`、`create_entry_media_upload`、
   `attach_entry_media`、`remove_entry_media`
@@ -79,7 +81,7 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 - 永久删除：`confirmPermanentDelete=true`，且
   `confirmationEntryId === entryId`
 - 提交导入：`confirmCommit=true`
-- 游戏库、书架与音乐的软删除与恢复：`confirm=true`，并提供当前 `versionNo`
+- 游戏库、书架、音乐与足迹的软删除与恢复：`confirm=true`，并提供当前 `versionNo`
 - 公开记录：必须先 `prepare_publish`，再提交短时确认码到
   `confirm_action`
 - 移除动态里的照片/视频：`confirmRemove=true`（文件会从存储中删除）

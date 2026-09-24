@@ -18,6 +18,7 @@ import {
   FileArchive,
   FileClock,
   FileJson,
+  CalendarHeart,
   Film,
   Globe2,
   Gamepad2,
@@ -29,6 +30,7 @@ import {
   LockKeyhole,
   Menu,
   MessageCircleMore,
+  MapPin,
   MoreHorizontal,
   Music2,
   Plus,
@@ -110,6 +112,9 @@ import {
   type ToastMessage,
 } from "./models";
 import { GameLibraryPage } from "./GameLibraryPage";
+import { LocalBackupPanel } from "./LocalBackupPanel";
+import { PlacesPage } from "./PlacesPage";
+import { ReviewPage } from "./ReviewPage";
 import { ShelfPage } from "./ShelfPage";
 import {
   EntryAttachments,
@@ -129,6 +134,8 @@ const ROUTES = {
   games: "/games",
   books: "/books",
   music: "/music",
+  places: "/places",
+  review: "/review",
   search: "/search",
   imports: "/imports",
   exports: "/exports",
@@ -144,6 +151,8 @@ type AppRoute =
   | { kind: "games" }
   | { kind: "books" }
   | { kind: "music" }
+  | { kind: "places" }
+  | { kind: "review" }
   | { kind: "entry-detail"; id: string }
   | { kind: "search" }
   | { kind: "imports" }
@@ -201,6 +210,18 @@ const NAV_ITEMS = [
     label: "音乐",
     path: ROUTES.music,
     icon: Music2,
+    section: "main",
+  },
+  {
+    label: "足迹",
+    path: ROUTES.places,
+    icon: MapPin,
+    section: "main",
+  },
+  {
+    label: "年度回顾",
+    path: ROUTES.review,
+    icon: CalendarHeart,
     section: "main",
   },
   {
@@ -282,6 +303,10 @@ function parseRoute(pathname: string): AppRoute {
       return { kind: "books" };
     case ROUTES.music:
       return { kind: "music" };
+    case ROUTES.places:
+      return { kind: "places" };
+    case ROUTES.review:
+      return { kind: "review" };
     case ROUTES.search:
       return { kind: "search" };
     case ROUTES.imports:
@@ -311,6 +336,10 @@ function getRoutePath(route: AppRoute): string {
       return ROUTES.books;
     case "music":
       return ROUTES.music;
+    case "places":
+      return ROUTES.places;
+    case "review":
+      return ROUTES.review;
     case "anime-detail":
       return `/anime/${encodeURIComponent(route.id)}`;
     case "entry-detail":
@@ -988,6 +1017,10 @@ function renderRoute(props: RenderRouteProps): ReactNode {
           pushToast={props.pushToast}
         />
       );
+    case "places":
+      return <PlacesPage onCreatePost={props.onCreatePost} pushToast={props.pushToast} />;
+    case "review":
+      return <ReviewPage onOpenEntry={(id) => props.navigate(entryPath(id))} />;
     case "anime-detail":
       return (
         <AnimeDetailPage
@@ -3306,6 +3339,8 @@ function ExportsPage({ exports, onCreateExport, pushToast }: ExportsPageProps) {
           </button>
         }
       />
+
+      <LocalBackupPanel />
 
       <section className="backup-health">
         <div className="backup-score">

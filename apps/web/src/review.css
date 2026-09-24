@@ -1,0 +1,605 @@
+/* 年度回顾 — calm cards; the data (emoji, one blue ramp) is the only colour. */
+
+.route-stage:has(> .rv-page) {
+  animation-fill-mode: backwards;
+}
+
+.rv-page {
+  --rv-ink: #14171d;
+  --rv-sub: #5b6470;
+  --rv-faint: #8a919c;
+  --rv-line: #e3e6ea;
+  --rv-soft: #f3f4f6;
+  --rv-card: #ffffff;
+  --rv-accent: #256abf;
+  --rv-empty: #eceff3;
+  --rv-heat-1: #86b6ef;
+  --rv-heat-2: #3987e5;
+  --rv-heat-3: #1c5cab;
+  --rv-heat-4: #104281;
+
+  width: min(100%, 1180px);
+  color: var(--rv-ink);
+}
+
+.rv-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 24px;
+}
+
+.rv-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rv-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.rv-head h1 {
+  margin: 4px 0 2px;
+  font-family: "Ledger Display", "Noto Serif SC", Georgia, serif;
+  font-size: clamp(38px, 5vw, 54px);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.rv-lede {
+  color: var(--rv-sub);
+  font-size: 15px;
+}
+
+.rv-years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.rv-years button,
+.rv-toggle button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--rv-line);
+  border-radius: 999px;
+  background: var(--rv-card);
+  color: var(--rv-sub);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-years button.is-active,
+.rv-toggle button.is-active {
+  border-color: var(--rv-ink);
+  background: var(--rv-ink);
+  color: #ffffff;
+}
+
+.rv-state {
+  display: grid;
+  min-height: 240px;
+  place-content: center;
+  border: 1px dashed #cdd3da;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 70%);
+  color: var(--rv-sub);
+}
+
+.rv-state.is-error {
+  color: #b42318;
+}
+
+.rv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transition: opacity 160ms ease;
+}
+
+.rv-body.is-loading {
+  opacity: 0.5;
+}
+
+.rv-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--rv-line);
+  border-radius: 16px;
+  background: var(--rv-card);
+}
+
+.rv-stats > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  padding: 16px 20px;
+}
+
+.rv-stats > div + div {
+  border-left: 1px solid var(--rv-line);
+}
+
+.rv-stats dt {
+  color: var(--rv-sub);
+  font-size: 13px;
+}
+
+.rv-stats dd {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.rv-stats small {
+  margin-left: 3px;
+  color: var(--rv-sub);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rv-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 22px 22px;
+  border: 1px solid var(--rv-line);
+  border-radius: 16px;
+  background: var(--rv-card);
+}
+
+.rv-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rv-card-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rv-card-head h2 svg {
+  color: var(--rv-sub);
+}
+
+.rv-card-head p {
+  margin-top: 3px;
+  color: var(--rv-sub);
+  font-size: 13px;
+}
+
+.rv-toggle {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.rv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* Calendar ----------------------------------------------------------------- */
+
+.rv-months {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 18px 22px;
+}
+
+.rv-month h3 {
+  margin: 0 0 6px;
+  color: var(--rv-sub);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rv-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 24px);
+  gap: 3px;
+}
+
+.rv-weekday {
+  color: var(--rv-faint);
+  font-size: 10px;
+  text-align: center;
+}
+
+.rv-day {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--rv-empty);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.rv-day.is-mood.has-mood {
+  background: transparent;
+}
+
+.rv-day.is-future {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rv-empty);
+}
+
+.rv-day.is-heat.level-1 { background: var(--rv-heat-1); }
+.rv-day.is-heat.level-2 { background: var(--rv-heat-2); }
+.rv-day.is-heat.level-3 { background: var(--rv-heat-3); }
+.rv-day.is-heat.level-4 { background: var(--rv-heat-4); }
+
+.rv-scale {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rv-sub);
+  font-size: 12px;
+}
+
+.rv-scale .rv-day {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.rv-tip {
+  position: absolute;
+  z-index: 3;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--rv-ink);
+  color: #ffffff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 6px));
+}
+
+.rv-mood-bars {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-mood-bars li {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.rv-mood-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--rv-sub);
+}
+
+.rv-mood-label span {
+  font-size: 16px;
+}
+
+.rv-mood-track {
+  height: 8px;
+}
+
+.rv-mood-track i {
+  display: block;
+  min-width: 4px;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--rv-accent);
+}
+
+.rv-mood-count {
+  color: var(--rv-ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rv-empty-line {
+  color: var(--rv-faint);
+  font-size: 13px;
+}
+
+/* Monthly columns ------------------------------------------------------------ */
+
+.rv-columns {
+  position: relative;
+  display: grid;
+  height: 190px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 2px;
+  align-items: end;
+  padding-top: 18px;
+  border-bottom: 1px solid var(--rv-line);
+}
+
+.rv-column {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  cursor: default;
+}
+
+.rv-column-bar {
+  width: min(24px, 70%);
+  min-height: 0;
+  border-radius: 4px 4px 0 0;
+  background: var(--rv-accent);
+}
+
+.rv-column:hover .rv-column-bar {
+  background: var(--rv-heat-3);
+}
+
+.rv-column-value {
+  min-height: 16px;
+  color: var(--rv-ink);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-column-label {
+  position: absolute;
+  bottom: -20px;
+  color: var(--rv-faint);
+  font-size: 11px;
+}
+
+.rv-table {
+  margin-top: 14px;
+  color: var(--rv-sub);
+  font-size: 12px;
+}
+
+.rv-table summary {
+  cursor: pointer;
+}
+
+.rv-table table {
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-table th,
+.rv-table td {
+  padding: 3px 14px 3px 0;
+  text-align: left;
+}
+
+/* Lists ----------------------------------------------------------------------- */
+
+.rv-first {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--rv-soft);
+  color: var(--rv-ink);
+  font-size: 15px;
+  line-height: 1.7;
+  text-align: left;
+}
+
+.rv-first svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+  color: var(--rv-faint);
+}
+
+.rv-first:hover {
+  background: #eaecef;
+}
+
+.rv-subhead {
+  margin: 4px 0 0;
+  color: var(--rv-sub);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rv-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-tags li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--rv-soft);
+  font-size: 13px;
+}
+
+.rv-tags span {
+  color: var(--rv-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 16px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-shelf li {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rv-shelf strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-shelf li > span:last-child {
+  overflow: hidden;
+  color: var(--rv-sub);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-cover {
+  display: grid;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  margin-bottom: 4px;
+  place-items: center;
+  border-radius: 6px;
+  background: #2b3a55;
+  color: rgb(255 255 255 / 85%);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.rv-cover.is-square {
+  aspect-ratio: 1;
+}
+
+.rv-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rv-places {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-places li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, auto) 1fr;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rv-line);
+  font-size: 14px;
+}
+
+.rv-places li:first-child {
+  border-top: 0;
+}
+
+.rv-places time {
+  color: var(--rv-faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-places span {
+  color: var(--rv-sub);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .rv-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .rv-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rv-stats > div {
+    padding: 12px 14px;
+  }
+
+  .rv-stats > div + div {
+    border-left: 0;
+  }
+
+  .rv-stats > div:nth-child(even) {
+    border-left: 1px solid var(--rv-line);
+  }
+
+  .rv-stats > div:nth-child(n + 3) {
+    border-top: 1px solid var(--rv-line);
+  }
+
+  .rv-stats > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    border-left: 0;
+  }
+
+  .rv-stats dd {
+    font-size: 24px;
+  }
+
+  .rv-card {
+    padding: 16px;
+  }
+
+  .rv-months {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 10px;
+  }
+
+  .rv-month-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .rv-day {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    font-size: 13px;
+  }
+
+  .rv-scale .rv-day {
+    width: 14px;
+  }
+
+  .rv-weekday {
+    font-size: 9px;
+  }
+}

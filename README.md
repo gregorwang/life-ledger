@@ -5,11 +5,11 @@ Life Ledger 是一个默认私有、保留原文、可修订、可撤回、可�
 ## 当前交付
 
 - React + Vite + Cloudflare Workers Static Assets 管理端
-- 响应式「日常」动态（可自定义头像、背景、名字与签名，带表情与心情选择）、动漫库、游戏库、书架、音乐、作品详情、记录详情、搜索、导入、导出、设置和回收站
+- 响应式「日常」动态（可自定义头像、背景、名字与签名，带表情与心情选择）、动漫库、游戏库、书架、音乐、足迹、年度回顾（心情日历）、那年今日、作品详情、记录详情、搜索、导入、导出、设置和回收站
 - 私人 / 待确认 / 公开状态机，以及发布预览 + 文本确认
 - 软删除、恢复为私人、永久清除文本确认
 - D1 schema migration、独立开发 seed、Core WorkerEntrypoint RPC
-- 无状态 Remote MCP Worker 与 48 个记录、动态照片/视频与补充、媒体、游戏库、书架与音乐、检索、统计回顾、修订、上传、发布和导出工具，外加上下文资源与周/月回顾提示词
+- 无状态 Remote MCP Worker 与 53 个记录、动态照片/视频与补充、媒体、游戏库、书架与音乐、足迹、检索、统计回顾、修订、上传、发布和导出工具，外加上下文资源与周/月回顾提示词
 - 公开 `/public/v1/anime` 与 `/public/v1/timeline` 白名单投影
 - 可直接移植到现有个人网站的 `@life-ledger/public-adapter`，远端异常或字段校验失败时回退静态数据
 - Cloudflare Workflow 定时/手动导出、私有 R2 归档，以及内容寻址的 R2 图片上传与公开只读加载
@@ -103,6 +103,52 @@ workspace”。每个 Worker 要在 Cloudflare 控制台 **Settings → Build** 
   `pnpm db:migrate:remote`，部署命令只保留 `npx wrangler deploy`。
 - Web 的 `AUTH_PASSWORD`、`AUTH_SESSION_SECRET` 在 Worker 的 Secrets 里配置；构建日志里的
   “Missing required secrets” 警告不影响部署。
+
+## 本地备份与恢复
+
+数据主权的最后一环是「数据在自己的硬盘上」。所有 R2 备份都在同一个 Cloudflare
+账号里，账号出问题时它们一起不可用，所以需要定期把完整副本拉到本地。
+
+**网页一键下载**：「导出与备份」页 →「下载完整备份」。浏览器边下载边打包成 zip
+（Chrome / Edge 会直接写到你选的位置，不占内存），内容：
+
+- `日常/年/月.md`：每条动态原文、心情、补充、标签，照片视频用相对路径引用
+- `书架.md`、`音乐.md`、`游戏库.md`、`动漫与影视.md`、`足迹.md`
+- `media/`：所有照片、视频、封面原文件
+- `data/ledger.json`：数据库每一张表（含已删除和修订历史）
+- `data/restore.sql`：可直接导入空 D1 / SQLite 的恢复脚本
+
+**每周自动增量备份**（零依赖，Node 18+）：
+
+```bash
+LIFE_LEDGER_URL=https://life-ledger-web.ishallnotwant123.workers.dev \
+LIFE_LEDGER_PASSWORD=你的密码 \
+node scripts/pull-backup.mjs ~/LifeLedgerBackup
+```
+
+照片视频只下载新增的、本地永不删除；文本每次重建；`_snapshots/` 下保留每次的
+`ledger.json` 和 `restore.sql`。
+
+- Windows（PowerShell，每周日 21:00）：
+  ```powershell
+  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-NoProfile -Command "$env:LIFE_LEDGER_URL=''https://…''; $env:LIFE_LEDGER_PASSWORD=''…''; node C:\path\to\life-ledger\scripts\pull-backup.mjs D:\LifeLedgerBackup"'
+  Register-ScheduledTask -TaskName "LifeLedgerBackup" -Action $action -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 9pm)
+  ```
+- macOS / Linux（`crontab -e`）：
+  `0 21 * * 0 LIFE_LEDGER_URL=https://… LIFE_LEDGER_PASSWORD=… node /path/to/life-ledger/scripts/pull-backup.mjs ~/LifeLedgerBackup`
+
+**恢复演练**（已在测试和本地 D1 上跑通：20 张表逐行一致）：
+
+```bash
+wrangler d1 create life-ledger-restore
+wrangler d1 execute life-ledger-restore --remote --file ~/LifeLedgerBackup/data/restore.sql
+node scripts/restore-media.mjs ~/LifeLedgerBackup life-ledger-media   # 照片视频传回 R2
+```
+
+`restore.sql` 不含 `BEGIN/COMMIT`（D1 不接受），用 `PRAGMA defer_foreign_keys`
+按外键顺序建表插数，索引和触发器最后创建；迁移记录一起恢复，之后
+`wrangler d1 migrations apply` 会正确显示无待执行迁移。只想本机查看：
+`sqlite3 ledger.db < data/restore.sql`。
 
 ## 数据安全规则
 

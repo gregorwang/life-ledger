@@ -162,6 +162,22 @@ function Rating({ value, large = false }: { value: number | null; large?: boolea
   );
 }
 
+/** Uploads a photo through the private media path and returns its URL. */
+export async function uploadCoverImage(file: File): Promise<string> {
+  const prepared = await prepareMediaFile(file);
+  URL.revokeObjectURL(prepared.previewUrl);
+  if (prepared.kind !== "image") {
+    throw new Error("封面只支持图片。");
+  }
+  const media = await uploadEntryMedia(
+    prepared.blob,
+    prepared.mimeType,
+    prepared.metadata,
+    () => undefined,
+  ).promise;
+  return media.url;
+}
+
 export interface ShelfPageProps {
   kind: ShelfKind;
   onCreatePost: (post: NewPost) => Promise<boolean>;
@@ -441,7 +457,7 @@ function feedText(item: ShelfItem, copy: KindCopy): string {
   return `${verb}${name}${rating}${review}`.slice(0, 50_000) || copy.title;
 }
 
-function Dialog({
+export function ShelfDialog({
   label,
   className,
   onClose,
@@ -540,7 +556,7 @@ function ShelfDetail({
   };
 
   return (
-    <Dialog label={item.title} className={`sh-detail is-${item.kind}`} onClose={onClose}>
+    <ShelfDialog label={item.title} className={`sh-detail is-${item.kind}`} onClose={onClose}>
       <button ref={closeRef} type="button" className="sh-close" aria-label="关闭" onClick={onClose}>
         <X aria-hidden="true" size={18} />
       </button>
@@ -649,11 +665,11 @@ function ShelfDetail({
           打开链接
         </a>
       ) : null}
-    </Dialog>
+    </ShelfDialog>
   );
 }
 
-function splitTags(value: string): string[] {
+export function splitTags(value: string): string[] {
   return [
     ...new Set(
       value
@@ -716,18 +732,7 @@ function ShelfEditor({
     if (!file) return;
     setUploading(true);
     try {
-      const prepared = await prepareMediaFile(file);
-      URL.revokeObjectURL(prepared.previewUrl);
-      if (prepared.kind !== "image") {
-        throw new Error("封面只支持图片。");
-      }
-      const media = await uploadEntryMedia(
-        prepared.blob,
-        prepared.mimeType,
-        prepared.metadata,
-        () => undefined,
-      ).promise;
-      setCoverUrl(media.url);
+      setCoverUrl(await uploadCoverImage(file));
     } catch (error: unknown) {
       pushToast("danger", "封面没有上传", error instanceof Error ? error.message : "请稍后再试。");
     } finally {
@@ -766,7 +771,7 @@ function ShelfEditor({
   };
 
   return (
-    <Dialog label={item ? `编辑《${item.title}》` : copy.add} className="sh-editor" onClose={onClose}>
+    <ShelfDialog label={item ? `编辑《${item.title}》` : copy.add} className="sh-editor" onClose={onClose}>
       <form onSubmit={submit}>
         <header className="sh-editor-header">
           <button type="button" className="sh-text-button" onClick={onClose}>
@@ -947,7 +952,7 @@ function ShelfEditor({
 
             <details className="sh-more">
               <summary>封面地址和链接</summary>
-              <label htmlFor={ids.cover}>封面图片地址</label>
+              <label htmlFor={ids.cover}>封面图片地址（只显示本站上传的图片）</label>
               <input
                 id={ids.cover}
                 value={coverUrl}
@@ -972,6 +977,6 @@ function ShelfEditor({
           </div>
         </div>
       </form>
-    </Dialog>
+    </ShelfDialog>
   );
 }

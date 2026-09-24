@@ -78,19 +78,83 @@ function sqlLiteral(value: unknown): string {
   return `'${text.replaceAll("'", "''")}'`;
 }
 
+export interface SchemaObject {
+  type: string;
+  name: string;
+  sql: string;
+}
+
+function toSchemaObject(value: string | SchemaObject): SchemaObject {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const match = /^\s*CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX|TRIGGER|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?["`[]?([^\s"`\](]+)/iu.exec(
+    value,
+  );
+  return {
+    type: match?.[1]?.toLowerCase() ?? "table",
+    name: match?.[2] ?? "",
+    sql: value,
+  };
+}
+
+/** Parent tables first, so a restore never inserts a child before its parent. */
+export function orderTablesByDependency(tables: SchemaObject[]): SchemaObject[] {
+  const byName = new Map(tables.map((table) => [table.name.toLowerCase(), table]));
+  const ordered: SchemaObject[] = [];
+  const state = new Map<string, "visiting" | "done">();
+  const visit = (table: SchemaObject) => {
+    const key = table.name.toLowerCase();
+    if (state.get(key)) {
+      return;
+    }
+    state.set(key, "visiting");
+    for (const match of table.sql.matchAll(/REFERENCES\s+["`[]?([A-Za-z0-9_]+)/giu)) {
+      const parent = byName.get(match[1]!.toLowerCase());
+      if (parent && parent !== table && state.get(parent.name.toLowerCase()) !== "visiting") {
+        visit(parent);
+      }
+    }
+    state.set(key, "done");
+    ordered.push(table);
+  };
+  for (const table of tables) {
+    visit(table);
+  }
+  return ordered;
+}
+
+/**
+ * A SQL file that restores into an empty D1 database
+ * (`wrangler d1 execute <db> --file`) or a plain SQLite file. D1 rejects
+ * BEGIN/COMMIT, so foreign keys are deferred instead; tables are created and
+ * filled before indexes and triggers so no trigger can veto historic rows.
+ */
 export function buildSqlDump(
-  schemaStatements: string[],
+  schema: Array<string | SchemaObject>,
   tables: ExportTable[],
 ): Uint8Array {
+  const objects = schema.map(toSchemaObject);
+  const tableObjects = orderTablesByDependency(
+    objects.filter((object) => object.type === "table"),
+  );
+  const rank = new Map(
+    tableObjects.map((object, index) => [object.name.toLowerCase(), index]),
+  );
+  const orderedData = [...tables].sort(
+    (left, right) =>
+      (rank.get(left.name.toLowerCase()) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(right.name.toLowerCase()) ?? Number.MAX_SAFE_INTEGER),
+  );
   const lines = [
     "-- Life Ledger portable SQLite export",
-    "PRAGMA foreign_keys=OFF;",
-    "BEGIN TRANSACTION;",
+    "-- Restore into an EMPTY database: wrangler d1 execute <db> --remote --file <this file>",
+    "PRAGMA defer_foreign_keys = true;",
   ];
-  for (const statement of schemaStatements) {
-    lines.push(`${statement.replace(/;\s*$/, "")};`);
+  for (const object of tableObjects) {
+    lines.push(`${object.sql.replace(/;\s*$/, "")};`);
   }
-  for (const table of tables) {
+  for (const table of orderedData) {
     for (const row of table.rows) {
       const entries = Object.entries(row);
       if (entries.length === 0) {
@@ -107,7 +171,12 @@ export function buildSqlDump(
       );
     }
   }
-  lines.push("COMMIT;", "PRAGMA foreign_keys=ON;", "");
+  for (const object of objects) {
+    if (object.type !== "table") {
+      lines.push(`${object.sql.replace(/;\s*$/, "")};`);
+    }
+  }
+  lines.push("");
   return encodeUtf8(lines.join("\n"));
 }
 

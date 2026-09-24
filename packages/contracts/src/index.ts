@@ -685,6 +685,108 @@ export const addShelfExcerptInputSchema = z
   })
   .strict();
 
+export const placeCategorySchema = z.enum([
+  "city",
+  "sight",
+  "food",
+  "stay",
+  "nature",
+  "event",
+  "other",
+]);
+
+const placeFields = {
+  name: z.string().trim().min(1).max(200),
+  city: z.string().trim().min(1).max(100).nullable(),
+  country: z.string().trim().min(1).max(100).nullable(),
+  category: placeCategorySchema,
+  trip: z.string().trim().min(1).max(120).nullable(),
+  visitedOn: localDateSchema,
+  leftOn: localDateSchema.nullable(),
+  rating: z.number().min(0).max(10).multipleOf(0.1).nullable(),
+  note: z.string().trim().max(50_000),
+  coverUrl: shelfCoverUrlSchema.nullable(),
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(30),
+};
+
+function checkPlace(
+  value: {
+    visitedOn?: string | undefined;
+    leftOn?: string | null | undefined;
+    latitude?: number | null | undefined;
+    longitude?: number | null | undefined;
+  },
+  context: z.RefinementCtx,
+) {
+  if (value.visitedOn && value.leftOn && value.leftOn < value.visitedOn) {
+    context.addIssue({
+      code: "custom",
+      path: ["leftOn"],
+      message: "leftOn cannot be earlier than visitedOn.",
+    });
+  }
+  if (
+    value.latitude !== undefined &&
+    value.longitude !== undefined &&
+    (value.latitude === null) !== (value.longitude === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["longitude"],
+      message: "latitude and longitude must be set together.",
+    });
+  }
+}
+
+export const createPlaceInputSchema = z
+  .object({
+    name: placeFields.name,
+    city: placeFields.city.default(null),
+    country: placeFields.country.default(null),
+    category: placeFields.category.default("other"),
+    trip: placeFields.trip.default(null),
+    visitedOn: placeFields.visitedOn,
+    leftOn: placeFields.leftOn.default(null),
+    rating: placeFields.rating.default(null),
+    note: placeFields.note.default(""),
+    coverUrl: placeFields.coverUrl.default(null),
+    latitude: placeFields.latitude.default(null),
+    longitude: placeFields.longitude.default(null),
+    tags: placeFields.tags.default([]),
+  })
+  .strict()
+  .superRefine(checkPlace);
+
+export const updatePlaceInputSchema = z
+  .object({
+    versionNo: z.number().int().positive(),
+    name: placeFields.name.optional(),
+    city: placeFields.city.optional(),
+    country: placeFields.country.optional(),
+    category: placeFields.category.optional(),
+    trip: placeFields.trip.optional(),
+    visitedOn: placeFields.visitedOn.optional(),
+    leftOn: placeFields.leftOn.optional(),
+    rating: placeFields.rating.optional(),
+    note: placeFields.note.optional(),
+    coverUrl: placeFields.coverUrl.optional(),
+    latitude: placeFields.latitude.optional(),
+    longitude: placeFields.longitude.optional(),
+    tags: placeFields.tags.optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).some((key) => key !== "versionNo"), {
+    message: "At least one place field must be provided.",
+  });
+
+export const listPlacesInputSchema = z.object({
+  query: z.string().trim().max(300).default(""),
+  year: z.number().int().min(1900).max(2200).nullable().default(null),
+  limit: z.number().int().min(1).max(2_000).default(1_000),
+});
+
 export const updateEntryInputSchema = z.object({
   versionNo: z.number().int().positive(),
   bodyRaw: z.string().trim().min(1).max(50_000).optional(),
@@ -827,6 +929,10 @@ export type CreateEntryMediaUploadInput = z.infer<
 export type ConfirmActionInput = z.infer<typeof confirmActionInputSchema>;
 export type LedgerSettings = z.infer<typeof settingsSchema>;
 export type LedgerProfile = z.infer<typeof profileSchema>;
+export type PlaceCategory = z.infer<typeof placeCategorySchema>;
+export type CreatePlaceInput = z.input<typeof createPlaceInputSchema>;
+export type UpdatePlaceInput = z.infer<typeof updatePlaceInputSchema>;
+export type ListPlacesInput = z.input<typeof listPlacesInputSchema>;
 export type ShelfKind = z.infer<typeof shelfKindSchema>;
 export type ShelfStatus = z.infer<typeof shelfStatusSchema>;
 export type ShelfFormat = z.infer<typeof shelfFormatSchema>;
@@ -1104,6 +1210,74 @@ export interface GameLibraryItem {
   deletedAt: string | null;
 }
 
+export interface Place {
+  id: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  category: PlaceCategory;
+  trip: string | null;
+  visitedOn: string;
+  leftOn: string | null;
+  rating: number | null;
+  note: string;
+  coverUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  tags: string[];
+  status: "active" | "deleted";
+  versionNo: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface YearReviewWork {
+  mediaWorkId: string;
+  title: string;
+  mediaType: MediaType;
+  coverUrl: string | null;
+  logCount: number;
+  /** Latest score given this year, 0–10. */
+  score: number | null;
+}
+
+export interface YearReview {
+  year: number;
+  timezone: string;
+  /** Years that have anything recorded, newest first. */
+  years: number[];
+  entries: {
+    total: number;
+    activeDays: number;
+    longestStreak: number;
+    byType: Array<CountBucket<EntryType>>;
+    byMonth: number[];
+  };
+  moods: {
+    counts: CountBucket[];
+    /** The last mood recorded on each day. */
+    days: Array<{ date: string; mood: string }>;
+  };
+  /** Posts per local day, for the calendar. */
+  days: Array<{ date: string; count: number }>;
+  topTags: CountBucket[];
+  firstEntry: { id: string; occurredAt: string; excerpt: string } | null;
+  works: YearReviewWork[];
+  books: ShelfItem[];
+  music: ShelfItem[];
+  places: Place[];
+}
+
+export interface ArchiveSnapshot {
+  generatedAt: string;
+  timezone: string;
+  /** Every table in the database, row for row. */
+  tables: Array<{ name: string; rows: Array<Record<string, unknown>> }>;
+  /** Restores into an empty D1/SQLite database. */
+  restoreSql: string;
+}
+
 export interface ShelfItem {
   id: string;
   kind: ShelfKind;
@@ -1328,6 +1502,13 @@ export interface CoreBinding {
   getSettings(): Promise<LedgerSettings>;
   updateSettings(settings: LedgerSettings): Promise<LedgerSettings>;
   getProfile(): Promise<LedgerProfile>;
+  getArchiveSnapshot(): Promise<ArchiveSnapshot>;
+  getYearReview(year: number): Promise<YearReview>;
+  listPlaces(input: ListPlacesInput): Promise<Place[]>;
+  createPlace(input: CreatePlaceInput): Promise<Place>;
+  updatePlace(id: string, input: UpdatePlaceInput): Promise<Place>;
+  deletePlace(id: string, versionNo: number): Promise<Place>;
+  restorePlace(id: string, versionNo: number): Promise<Place>;
   listShelfItems(input: ListShelfItemsInput): Promise<ShelfItem[]>;
   createShelfItem(input: CreateShelfItemInput): Promise<ShelfItem>;
   updateShelfItem(id: string, input: UpdateShelfItemInput): Promise<ShelfItem>;

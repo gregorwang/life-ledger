@@ -9,8 +9,11 @@ import type {
   GameLibraryItem,
   ImportDryRunReport,
   LedgerProfile,
+  OnThisDayResult,
+  Place,
   ShelfItem,
   ShelfKind,
+  YearReview,
   MediaWorkDetail,
   MediaWorkSummary,
   MutationResult,
@@ -277,6 +280,50 @@ export async function loadGameLibrary(
     signal ? { signal } : undefined,
   );
   return response.items;
+}
+
+export async function loadYearReview(year: number, signal?: AbortSignal): Promise<YearReview> {
+  return requestJson<YearReview>(`/api/v1/review/${year}`, signal ? { signal } : undefined);
+}
+
+export async function loadOnThisDay(signal?: AbortSignal): Promise<LedgerEntry[]> {
+  const result = await requestJson<OnThisDayResult>(
+    "/api/v1/on-this-day",
+    signal ? { signal } : undefined,
+  );
+  return result.entries.map(mapEntry);
+}
+
+export async function loadPlaces(signal?: AbortSignal): Promise<Place[]> {
+  const response = await requestJson<{ items: Place[] }>(
+    "/api/v1/places",
+    signal ? { signal } : undefined,
+  );
+  return response.items;
+}
+
+export async function createPlace(input: object): Promise<Place> {
+  return requestJson<Place>("/api/v1/places", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updatePlace(
+  place: Pick<Place, "id" | "versionNo">,
+  patch: object,
+): Promise<Place> {
+  return requestJson<Place>(`/api/v1/places/${encodeURIComponent(place.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...patch, versionNo: place.versionNo }),
+  });
+}
+
+export async function deletePlace(place: Pick<Place, "id" | "versionNo">): Promise<Place> {
+  return requestJson<Place>(`/api/v1/places/${encodeURIComponent(place.id)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ versionNo: place.versionNo }),
+  });
 }
 
 export async function loadShelf(

@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Camera,
+  CalendarClock,
   Clapperboard,
   CornerDownRight,
   ExternalLink,
@@ -47,6 +48,7 @@ import {
 
 import {
   discardEntryMedia,
+  loadOnThisDay,
   uploadEntryMedia,
 } from "./api";
 import {
@@ -190,6 +192,7 @@ export function TimelineFeed(props: TimelineFeedProps) {
             }}
             pushToast={props.pushToast}
           />
+          <OnThisDay timeZone={timeZone} onOpenEntry={props.onOpenEntry} />
           <FeedTabs value={tab} onChange={setTab} />
           {days.length ? (
             days.map((day) => (
@@ -1802,5 +1805,93 @@ function ProfileDialog({
       </form>
     </div>,
     document.body,
+  );
+}
+
+const ON_THIS_DAY_DISMISS_KEY = "life-ledger:on-this-day-dismissed";
+
+/** Earlier years on today's date; hidden for the day once dismissed. */
+function OnThisDay({
+  timeZone,
+  onOpenEntry,
+}: {
+  timeZone: string;
+  onOpenEntry: (entryId: string) => void;
+}) {
+  const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone }).format(new Date());
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem(ON_THIS_DAY_DISMISS_KEY) === today;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (dismissed) return;
+    const controller = new AbortController();
+    void loadOnThisDay(controller.signal)
+      .then(setEntries)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [dismissed]);
+
+  if (dismissed || entries.length === 0) {
+    return null;
+  }
+  const thisYear = Number(today.slice(0, 4));
+  const monthDay = `${Number(today.slice(5, 7))} 月 ${Number(today.slice(8, 10))} 日`;
+
+  return (
+    <section className="feed-on-this-day" aria-label="那年今日">
+      <header>
+        <CalendarClock aria-hidden="true" size={16} />
+        <strong>那年今日</strong>
+        <span>{monthDay}</span>
+        <button
+          type="button"
+          className="feed-icon-button"
+          aria-label="今天不再显示"
+          onClick={() => {
+            try {
+              window.localStorage.setItem(ON_THIS_DAY_DISMISS_KEY, today);
+            } catch {
+              // Nothing to remember in private mode; hide for this visit.
+            }
+            setDismissed(true);
+          }}
+        >
+          <X aria-hidden="true" size={15} />
+        </button>
+      </header>
+      <ul>
+        {entries.slice(0, 5).map((entry) => {
+          const year = Number(
+            new Intl.DateTimeFormat("sv-SE", { timeZone, year: "numeric" }).format(
+              new Date(entry.occurredAt),
+            ),
+          );
+          const mood = moodFromTags(entry.tags);
+          return (
+            <li key={entry.id}>
+              <button type="button" onClick={() => onOpenEntry(entry.id)}>
+                <span className="feed-on-this-day-when">
+                  {thisYear - year} 年前
+                  <small>{year}</small>
+                </span>
+                <span className="feed-on-this-day-text">
+                  {mood ? <span aria-hidden="true">{mood} </span> : null}
+                  {isMediaOnlyBody(entry) ? "（照片 / 视频）" : entry.bodyRaw}
+                </span>
+                {entry.media[0]?.kind === "image" ? (
+                  <img src={entry.media[0].url} alt="" loading="lazy" decoding="async" />
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

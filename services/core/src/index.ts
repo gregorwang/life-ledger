@@ -42,7 +42,16 @@ import {
   shelfExcerptSchema,
   shelfFormatMatchesKind,
   updateShelfItemInputSchema,
+  createPlaceInputSchema,
+  listPlacesInputSchema,
+  updatePlaceInputSchema,
+  type CreatePlaceInput,
+  type ListPlacesInput,
+  type Place,
+  type UpdatePlaceInput,
   type AddShelfExcerptInput,
+  type ArchiveSnapshot,
+  type YearReview,
   type CreateShelfItemInput,
   type LedgerProfile,
   type ListShelfItemsInput,
@@ -121,6 +130,7 @@ import {
   serializeJsonLines,
   sha256HexBytes,
   type ExportTable,
+  type SchemaObject,
 } from "./export-utils";
 import {
   createEntryMediaObjectKey,
@@ -130,6 +140,11 @@ import {
   uploadBaseOrigin,
 } from "./entry-media";
 import { mediaWatchStatusFromLegacyStatus } from "./media-import";
+import {
+  buildYearReview,
+  type YearReviewEntryRow,
+  type YearReviewMediaRow,
+} from "./year-review";
 import {
   MEDIA_WORK_AGGREGATE_SELECT,
   mediaWorkOrderBy,
@@ -323,6 +338,28 @@ interface ShelfItemRow {
   started_on: string | null;
   finished_on: string | null;
   status: ShelfItem["status"];
+  version_no: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface PlaceRow {
+  id: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  category: Place["category"];
+  trip: string | null;
+  visited_on: string;
+  left_on: string | null;
+  rating: number | null;
+  note: string;
+  cover_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  tags_json: string;
+  status: Place["status"];
   version_no: number;
   created_at: string;
   updated_at: string;
@@ -728,6 +765,36 @@ function toShelfItem(row: ShelfItemRow): ShelfItem {
   };
 }
 
+function toPlace(row: PlaceRow): Place {
+  return {
+    id: row.id,
+    name: row.name,
+    city: row.city,
+    country: row.country,
+    category: row.category,
+    trip: row.trip,
+    visitedOn: row.visited_on,
+    leftOn: row.left_on,
+    rating: row.rating === null ? null : Number(row.rating),
+    note: row.note,
+    coverUrl: row.cover_url,
+    latitude: row.latitude === null ? null : Number(row.latitude),
+    longitude: row.longitude === null ? null : Number(row.longitude),
+    tags: safeStringArray(row.tags_json),
+    status: row.status,
+    versionNo: Number(row.version_no),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+const PLACE_COLUMNS = `
+  id, name, city, country, category, trip, visited_on, left_on, rating, note,
+  cover_url, latitude, longitude, tags_json, status, version_no, created_at,
+  updated_at, deleted_at
+`;
+
 const SHELF_COLUMNS = `
   id, kind, title, creator, format, shelf_status, rating, progress, review,
   excerpts_json, tags_json, cover_url, source_url, started_on, finished_on,
@@ -764,26 +831,6 @@ const ENTRY_SELECT = `
   LEFT JOIN media_logs ml ON ml.entry_id = e.id
   LEFT JOIN media_works mw ON mw.id = ml.media_work_id
 `;
-
-const FULL_EXPORT_TABLES = [
-  "users",
-  "entries",
-  "media_works",
-  "media_seasons",
-  "media_logs",
-  "entry_revisions",
-  "pending_actions",
-  "audit_events",
-  "exports",
-  "app_meta",
-  "import_batches",
-  "media_assets",
-  "media_upload_requests",
-  "entry_media",
-  "entry_follow_ups",
-  "game_library_items",
-  "shelf_items",
-] as const;
 
 const STATS_ROW_LIMIT = 20_000;
 const EXPORT_PAGE_SIZE = 250;
@@ -850,21 +897,11 @@ async function readPagedRows(
 
 async function collectFullExport(
   database: D1Database,
-): Promise<{ tables: ExportTable[]; schema: string[] }> {
-  const tables: ExportTable[] = [];
-  for (const table of FULL_EXPORT_TABLES) {
-    tables.push({
-      name: table,
-      rows: await readPagedRows(
-        database,
-        `SELECT * FROM "${table}" ORDER BY rowid`,
-      ),
-    });
-  }
+): Promise<{ tables: ExportTable[]; schema: SchemaObject[] }> {
   const schemaRows = await readPagedRows(
     database,
     `
-      SELECT sql
+      SELECT type, name, sql
       FROM sqlite_master
       WHERE sql IS NOT NULL
         AND name NOT LIKE 'sqlite_%'
@@ -872,19 +909,33 @@ async function collectFullExport(
       ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, name
     `,
   );
-  return {
-    tables,
-    schema: schemaRows
-      .map((row) => row.sql)
-      .filter((sql): sql is string => typeof sql === "string"),
-  };
+  const schema = schemaRows.flatMap((row): SchemaObject[] =>
+    typeof row.sql === "string" && typeof row.name === "string"
+      ? [{ type: String(row.type), name: row.name, sql: row.sql }]
+      : [],
+  );
+  // Every table, not a hand-kept list, so new features are never left out.
+  const tables: ExportTable[] = [];
+  for (const object of schema) {
+    if (object.type !== "table") {
+      continue;
+    }
+    tables.push({
+      name: object.name,
+      rows: await readPagedRows(
+        database,
+        `SELECT * FROM "${object.name.replaceAll('"', '""')}" ORDER BY rowid`,
+      ),
+    });
+  }
+  return { tables, schema };
 }
 
 async function collectIncrementalExport(
   database: D1Database,
   since: string | null,
   cutoff: string,
-): Promise<{ tables: ExportTable[]; schema: string[] }> {
+): Promise<{ tables: ExportTable[]; schema: SchemaObject[] }> {
   const start = since ?? "1970-01-01T00:00:00.000Z";
   const tables: ExportTable[] = [
     {
@@ -1014,7 +1065,7 @@ async function collectIncrementalExport(
       ),
     },
   ];
-  for (const name of ["game_library_items", "shelf_items"] as const) {
+  for (const name of ["game_library_items", "shelf_items", "places"] as const) {
     tables.push({
       name,
       rows: await readPagedRows(
@@ -1683,6 +1734,292 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       `Cannot ${action} a ${current.status} game library item.`,
       409,
     );
+  }
+
+  async listPlaces(input: ListPlacesInput): Promise<Place[]> {
+    const parsed = listPlacesInputSchema.parse(input);
+    const clauses = ["user_id = ?", "status = 'active'"];
+    const values: unknown[] = [USER_ID];
+    if (parsed.year !== null) {
+      clauses.push("substr(visited_on, 1, 4) = ?");
+      values.push(String(parsed.year));
+    }
+    if (parsed.query) {
+      const like = `%${parsed.query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+      clauses.push(
+        "(name LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\' OR country LIKE ? ESCAPE '\\' OR trip LIKE ? ESCAPE '\\')",
+      );
+      values.push(like, like, like, like);
+    }
+    const result = await this.env.DB.prepare(`
+      SELECT ${PLACE_COLUMNS}
+      FROM places
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY visited_on DESC, created_at DESC
+      LIMIT ?
+    `)
+      .bind(...values, parsed.limit)
+      .all<PlaceRow>();
+    return result.results.map(toPlace);
+  }
+
+  async createPlace(input: CreatePlaceInput): Promise<Place> {
+    const parsed = createPlaceInputSchema.parse(input);
+    const id = createId("place");
+    const timestamp = nowIso();
+    await this.env.DB.prepare(`
+      INSERT INTO places (
+        id, user_id, name, city, country, category, trip, visited_on, left_on,
+        rating, note, cover_url, latitude, longitude, tags_json, status,
+        version_no, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, NULL)
+    `)
+      .bind(
+        id,
+        USER_ID,
+        parsed.name,
+        parsed.city,
+        parsed.country,
+        parsed.category,
+        parsed.trip,
+        parsed.visitedOn,
+        parsed.leftOn,
+        parsed.rating,
+        parsed.note,
+        parsed.coverUrl,
+        parsed.latitude,
+        parsed.longitude,
+        JSON.stringify(parsed.tags),
+        timestamp,
+        timestamp,
+      )
+      .run();
+    return this.#requirePlace(id);
+  }
+
+  async updatePlace(id: string, input: UpdatePlaceInput): Promise<Place> {
+    const parsed = updatePlaceInputSchema.parse(input);
+    const current = await this.#requirePlace(id);
+    if (current.status !== "active") {
+      throw new LedgerDomainError("PLACE_DELETED", "Restore the place before editing it.", 409);
+    }
+    const pick = <K extends keyof Place>(key: K, value: Place[K] | undefined): Place[K] =>
+      value !== undefined ? value : current[key];
+    const next = {
+      name: pick("name", parsed.name),
+      city: pick("city", parsed.city),
+      country: pick("country", parsed.country),
+      category: pick("category", parsed.category),
+      trip: pick("trip", parsed.trip),
+      visitedOn: pick("visitedOn", parsed.visitedOn),
+      leftOn: pick("leftOn", parsed.leftOn),
+      rating: pick("rating", parsed.rating),
+      note: pick("note", parsed.note),
+      coverUrl: pick("coverUrl", parsed.coverUrl),
+      latitude: pick("latitude", parsed.latitude),
+      longitude: pick("longitude", parsed.longitude),
+      tags: pick("tags", parsed.tags),
+    };
+    if (next.leftOn && next.leftOn < next.visitedOn) {
+      throw new LedgerDomainError("INVALID_PLACE_DATES", "leftOn cannot be earlier than visitedOn.");
+    }
+    if ((next.latitude === null) !== (next.longitude === null)) {
+      throw new LedgerDomainError(
+        "INVALID_PLACE_COORDINATES",
+        "latitude and longitude must be set together.",
+      );
+    }
+    const result = await this.env.DB.prepare(`
+      UPDATE places
+      SET
+        name = ?, city = ?, country = ?, category = ?, trip = ?, visited_on = ?,
+        left_on = ?, rating = ?, note = ?, cover_url = ?, latitude = ?,
+        longitude = ?, tags_json = ?, version_no = version_no + 1, updated_at = ?
+      WHERE id = ? AND user_id = ? AND status = 'active' AND version_no = ?
+    `)
+      .bind(
+        next.name,
+        next.city,
+        next.country,
+        next.category,
+        next.trip,
+        next.visitedOn,
+        next.leftOn,
+        next.rating,
+        next.note,
+        next.coverUrl,
+        next.latitude,
+        next.longitude,
+        JSON.stringify(next.tags),
+        nowIso(),
+        id,
+        USER_ID,
+        parsed.versionNo,
+      )
+      .run();
+    if (result.meta.changes !== 1) {
+      throw new LedgerDomainError(
+        "VERSION_CONFLICT",
+        "This place changed elsewhere; reload it before editing.",
+        409,
+      );
+    }
+    return this.#requirePlace(id);
+  }
+
+  async deletePlace(id: string, versionNo: number): Promise<Place> {
+    const timestamp = nowIso();
+    const result = await this.env.DB.prepare(`
+      UPDATE places
+      SET status = 'deleted', deleted_at = ?, updated_at = ?, version_no = version_no + 1
+      WHERE id = ? AND user_id = ? AND status = 'active' AND version_no = ?
+    `)
+      .bind(timestamp, timestamp, id, USER_ID, versionNo)
+      .run();
+    if (result.meta.changes !== 1) {
+      await this.#throwPlaceConflict(id, versionNo, "delete");
+    }
+    return this.#requirePlace(id);
+  }
+
+  async restorePlace(id: string, versionNo: number): Promise<Place> {
+    const result = await this.env.DB.prepare(`
+      UPDATE places
+      SET status = 'active', deleted_at = NULL, updated_at = ?, version_no = version_no + 1
+      WHERE id = ? AND user_id = ? AND status = 'deleted' AND version_no = ?
+    `)
+      .bind(nowIso(), id, USER_ID, versionNo)
+      .run();
+    if (result.meta.changes !== 1) {
+      await this.#throwPlaceConflict(id, versionNo, "restore");
+    }
+    return this.#requirePlace(id);
+  }
+
+  async #requirePlace(id: string): Promise<Place> {
+    const row = await this.env.DB.prepare(`
+      SELECT ${PLACE_COLUMNS} FROM places WHERE id = ? AND user_id = ? LIMIT 1
+    `)
+      .bind(id, USER_ID)
+      .first<PlaceRow>();
+    if (!row) {
+      throw new LedgerDomainError("PLACE_NOT_FOUND", "Place not found.", 404);
+    }
+    return toPlace(row);
+  }
+
+  async #throwPlaceConflict(
+    id: string,
+    versionNo: number,
+    action: "delete" | "restore",
+  ): Promise<never> {
+    const current = await this.#requirePlace(id);
+    if (current.versionNo !== versionNo) {
+      throw new LedgerDomainError(
+        "VERSION_CONFLICT",
+        "This place changed elsewhere; reload it before editing.",
+        409,
+      );
+    }
+    throw new LedgerDomainError(
+      "INVALID_PLACE_STATE",
+      `Cannot ${action} a ${current.status} place.`,
+      409,
+    );
+  }
+
+  async getYearReview(year: number): Promise<YearReview> {
+    if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+      throw new LedgerDomainError("INVALID_YEAR", `无效年份：${year}`);
+    }
+    const { timezone } = await this.getSettings();
+    // A day of slack on each side; buildYearReview trims to the local year.
+    const from = new Date(Date.UTC(year - 1, 11, 31)).toISOString();
+    const to = new Date(Date.UTC(year + 1, 0, 2)).toISOString();
+    const yearText = String(year);
+    const [entries, media, books, music, places, years] = await Promise.all([
+      this.env.DB.prepare(`
+        SELECT id, type, occurred_at, date_precision, tags_json,
+          substr(body_raw, 1, 140) AS excerpt
+        FROM entries
+        WHERE user_id = ? AND status = 'active' AND occurred_at >= ? AND occurred_at < ?
+        ORDER BY occurred_at
+      `)
+        .bind(USER_ID, from, to)
+        .all<YearReviewEntryRow>(),
+      this.env.DB.prepare(`
+        SELECT mw.id AS media_work_id, mw.canonical_title AS title,
+          mw.media_type, mw.cover_url, e.occurred_at, ml.score_100
+        FROM media_logs ml
+        INNER JOIN entries e ON e.id = ml.entry_id
+        INNER JOIN media_works mw ON mw.id = ml.media_work_id
+        WHERE e.user_id = ? AND e.status = 'active' AND e.occurred_at >= ? AND e.occurred_at < ?
+      `)
+        .bind(USER_ID, from, to)
+        .all<YearReviewMediaRow>(),
+      this.env.DB.prepare(`
+        SELECT ${SHELF_COLUMNS} FROM shelf_items
+        WHERE user_id = ? AND status = 'active' AND kind = 'book'
+          AND shelf_status = 'done' AND substr(finished_on, 1, 4) = ?
+        ORDER BY finished_on
+      `)
+        .bind(USER_ID, yearText)
+        .all<ShelfItemRow>(),
+      this.env.DB.prepare(`
+        SELECT ${SHELF_COLUMNS} FROM shelf_items
+        WHERE user_id = ? AND status = 'active' AND kind = 'music'
+          AND shelf_status IN ('done', 'in_progress')
+          AND substr(coalesce(finished_on, started_on, created_at), 1, 4) = ?
+        ORDER BY coalesce(rating, -1) DESC, updated_at DESC
+      `)
+        .bind(USER_ID, yearText)
+        .all<ShelfItemRow>(),
+      this.env.DB.prepare(`
+        SELECT ${PLACE_COLUMNS} FROM places
+        WHERE user_id = ? AND status = 'active' AND substr(visited_on, 1, 4) = ?
+        ORDER BY visited_on
+      `)
+        .bind(USER_ID, yearText)
+        .all<PlaceRow>(),
+      this.env.DB.prepare(`
+        SELECT DISTINCT year FROM (
+          SELECT substr(occurred_at, 1, 4) AS year FROM entries WHERE user_id = ? AND status = 'active'
+          UNION SELECT substr(finished_on, 1, 4) FROM shelf_items WHERE user_id = ? AND status = 'active' AND finished_on IS NOT NULL
+          UNION SELECT substr(visited_on, 1, 4) FROM places WHERE user_id = ? AND status = 'active'
+        )
+        ORDER BY year DESC
+      `)
+        .bind(USER_ID, USER_ID, USER_ID)
+        .all<{ year: string }>(),
+    ]);
+    const knownYears = new Set(
+      years.results.map((row) => Number(row.year)).filter(Number.isInteger),
+    );
+    knownYears.add(new Date().getUTCFullYear());
+    return buildYearReview({
+      year,
+      timezone,
+      years: [...knownYears].sort((left, right) => right - left),
+      entries: entries.results,
+      media: media.results,
+      books: books.results.map(toShelfItem),
+      music: music.results.map(toShelfItem),
+      places: places.results.map(toPlace),
+    });
+  }
+
+  /** Everything needed for a self-contained local backup, read in one go. */
+  async getArchiveSnapshot(): Promise<ArchiveSnapshot> {
+    const collected = await collectFullExport(this.env.DB);
+    const settings = await this.getSettings();
+    return {
+      generatedAt: nowIso(),
+      timezone: settings.timezone,
+      tables: collected.tables,
+      restoreSql: new TextDecoder().decode(
+        buildSqlDump(collected.schema, collected.tables),
+      ),
+    };
   }
 
   async listShelfItems(input: ListShelfItemsInput): Promise<ShelfItem[]> {
