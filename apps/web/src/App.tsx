@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
-  Box,
   Check,
   ChevronDown,
   ChevronRight,
@@ -102,7 +101,6 @@ import {
   type SearchFilters,
   type ToastMessage,
 } from "./models";
-import { CyberCollectionPage } from "./CyberCollectionPage";
 import { GameLibraryPage } from "./GameLibraryPage";
 import {
   sortAnimeWorks,
@@ -119,7 +117,6 @@ const ROUTES = {
   anime: "/anime",
   movies: "/movies",
   games: "/games",
-  collection: "/collection",
   search: "/search",
   imports: "/imports",
   exports: "/exports",
@@ -133,7 +130,6 @@ type AppRoute =
   | { kind: "anime-detail"; id: string }
   | { kind: "movies" }
   | { kind: "games" }
-  | { kind: "collection" }
   | { kind: "entry-detail"; id: string }
   | { kind: "search" }
   | { kind: "imports" }
@@ -172,12 +168,6 @@ const NAV_ITEMS = [
     label: "游戏库",
     path: ROUTES.games,
     icon: Gamepad2,
-    section: "main",
-  },
-  {
-    label: "赛博收藏",
-    path: ROUTES.collection,
-    icon: Box,
     section: "main",
   },
   {
@@ -255,8 +245,6 @@ function parseRoute(pathname: string): AppRoute {
       return { kind: "movies" };
     case ROUTES.games:
       return { kind: "games" };
-    case ROUTES.collection:
-      return { kind: "collection" };
     case ROUTES.search:
       return { kind: "search" };
     case ROUTES.imports:
@@ -282,8 +270,6 @@ function getRoutePath(route: AppRoute): string {
       return ROUTES.movies;
     case "games":
       return ROUTES.games;
-    case "collection":
-      return ROUTES.collection;
     case "anime-detail":
       return `/anime/${encodeURIComponent(route.id)}`;
     case "entry-detail":
@@ -844,8 +830,6 @@ function renderRoute(props: RenderRouteProps): ReactNode {
       );
     case "games":
       return <GameLibraryPage />;
-    case "collection":
-      return <CyberCollectionPage />;
     case "anime-detail":
       return (
         <AnimeDetailPage

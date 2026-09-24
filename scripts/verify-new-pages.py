@@ -1,4 +1,4 @@
-"""Browser verification for the game library and cyber collection routes."""
+"""Browser verification for the game library route."""
 
 from __future__ import annotations
 
@@ -10,19 +10,6 @@ from playwright.sync_api import sync_playwright
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = "http://127.0.0.1:5173"
-BLOCKOUT_RENDER = (
-    PROJECT_ROOT
-    / "recon"
-    / "sakura-angel-figure"
-    / "blockout-render.png"
-)
-FINAL_RENDER = (
-    PROJECT_ROOT
-    / "recon"
-    / "sakura-angel-figure"
-    / "final-material-render.png"
-)
-COLLECTION_SCREENSHOT = PROJECT_ROOT / ".tmp" / "collection-page.png"
 GAME_SCREENSHOT = PROJECT_ROOT / ".tmp" / "game-page.png"
 
 
@@ -59,86 +46,12 @@ def main() -> None:
             ),
         )
 
-        page.goto(
-            f"{BASE_URL}/collection?review=blockout",
-            wait_until="networkidle",
-        )
+        page.goto(f"{BASE_URL}/games", wait_until="networkidle")
         if "/auth/login" in page.url:
             page.locator('input[name="password"]').fill("emt520")
             page.locator('button[type="submit"]').click()
             page.wait_for_load_state("networkidle")
 
-        page.wait_for_selector(".figure-viewer canvas", timeout=30_000)
-        page.wait_for_timeout(1_200)
-        collection_items = page.locator(".collection-object-panel h2").count()
-        reference_images = page.locator(".collection-reference-images img").count()
-        page.screenshot(path=str(COLLECTION_SCREENSHOT), full_page=True)
-
-        slider = page.locator('.figure-viewer-toolbar input[type="range"]')
-        slider.evaluate(
-            """element => {
-              element.value = '0.55';
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-              element.dispatchEvent(new Event('change', { bubbles: true }));
-            }"""
-        )
-        page.wait_for_timeout(300)
-        exploded_value = slider.input_value()
-        page.get_by_role("button", name="复位").click()
-
-        # The reconstruction review requires a clean, square canvas that can be
-        # compared with the square front reference without UI chrome or cropping.
-        page.add_style_tag(
-            content="""
-              .collection-feature { display: block !important; }
-              .collection-object-panel,
-              .collection-reference-strip,
-              .figure-viewer-toolbar,
-              .figure-viewer-status { display: none !important; }
-              .collection-viewer-stage,
-              .figure-viewer,
-              .figure-viewer-canvas {
-                width: 900px !important;
-                height: 900px !important;
-                min-height: 900px !important;
-              }
-              .figure-viewer canvas {
-                background:
-                  linear-gradient(
-                    to bottom,
-                    #ffffff 0 11%,
-                    #c9efff 11% 86%,
-                    #ffffff 86% 100%
-                  ) !important;
-              }
-            """
-        )
-        page.wait_for_timeout(600)
-        page.locator(".figure-viewer canvas").screenshot(path=str(BLOCKOUT_RENDER))
-
-        page.goto(f"{BASE_URL}/collection", wait_until="networkidle")
-        page.wait_for_selector(".figure-viewer canvas", timeout=30_000)
-        page.get_by_role("button", name="暂停环绕").click()
-        page.add_style_tag(
-            content="""
-              .collection-feature { display: block !important; }
-              .collection-object-panel,
-              .collection-reference-strip,
-              .figure-viewer-toolbar,
-              .figure-viewer-status { display: none !important; }
-              .collection-viewer-stage,
-              .figure-viewer,
-              .figure-viewer-canvas {
-                width: 900px !important;
-                height: 900px !important;
-                min-height: 900px !important;
-              }
-            """
-        )
-        page.wait_for_timeout(600)
-        page.locator(".figure-viewer canvas").screenshot(path=str(FINAL_RENDER))
-
-        page.goto(f"{BASE_URL}/games", wait_until="networkidle")
         page.wait_for_selector(".game-card", timeout=30_000)
         all_games = page.locator(".game-card").count()
         page.get_by_role("button", name="已完成").click()
@@ -148,18 +61,12 @@ def main() -> None:
         page.screenshot(path=str(GAME_SCREENSHOT), full_page=True)
 
         report = {
-            "collectionItems": collection_items,
-            "referenceImages": reference_images,
-            "explodeSliderValue": exploded_value,
             "allGames": all_games,
             "completedGames": completed_games,
             "consoleErrors": console_errors,
             "pageErrors": page_errors,
             "failedResponses": failed_responses,
             "screenshots": {
-                "blockout": str(BLOCKOUT_RENDER),
-                "finalMaterial": str(FINAL_RENDER),
-                "collection": str(COLLECTION_SCREENSHOT),
                 "games": str(GAME_SCREENSHOT),
             },
         }

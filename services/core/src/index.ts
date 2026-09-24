@@ -31,7 +31,6 @@ import {
   type AuditEvent,
   type CaptureEntryInput,
   type ConfirmActionInput,
-  type CollectibleItem,
   type CreateGameLibraryItemInput,
   type CreateMediaSeasonInput,
   type CreateMediaWorkInput,
@@ -213,25 +212,6 @@ interface GameLibraryRow {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
-}
-
-interface CollectibleRow {
-  id: string;
-  category: CollectibleItem["category"];
-  title: string;
-  franchise: string | null;
-  character_name: string | null;
-  manufacturer: string | null;
-  status: CollectibleItem["status"];
-  cover_url: string | null;
-  source_image_urls_json: string;
-  model_kind: CollectibleItem["modelKind"];
-  model_key: string | null;
-  geometry_confidence: number;
-  hidden_region_confidence: number;
-  notes: string;
-  created_at: string;
-  updated_at: string;
 }
 
 interface ExportRow {
@@ -559,27 +539,6 @@ function toGameLibraryItem(row: GameLibraryRow): GameLibraryItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
-  };
-}
-
-function toCollectibleItem(row: CollectibleRow): CollectibleItem {
-  return {
-    id: row.id,
-    category: row.category,
-    title: row.title,
-    franchise: row.franchise,
-    characterName: row.character_name,
-    manufacturer: row.manufacturer,
-    status: row.status,
-    coverUrl: row.cover_url,
-    sourceImageUrls: safeStringArray(row.source_image_urls_json),
-    modelKind: row.model_kind,
-    modelKey: row.model_key,
-    geometryConfidence: Number(row.geometry_confidence),
-    hiddenRegionConfidence: Number(row.hidden_region_confidence),
-    notes: row.notes,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -1483,41 +1442,6 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       `Cannot ${action} a ${current.status} game library item.`,
       409,
     );
-  }
-
-  async listCollectibles(): Promise<CollectibleItem[]> {
-    const result = await this.env.DB.prepare(`
-      SELECT
-        id,
-        category,
-        title,
-        franchise,
-        character_name,
-        manufacturer,
-        status,
-        cover_url,
-        source_image_urls_json,
-        model_kind,
-        model_key,
-        geometry_confidence,
-        hidden_region_confidence,
-        notes,
-        created_at,
-        updated_at
-      FROM collectible_items
-      WHERE user_id = ?
-      ORDER BY
-        CASE category
-          WHEN 'figure' THEN 0
-          WHEN 'merch' THEN 1
-          ELSE 2
-        END,
-        updated_at DESC,
-        title
-    `)
-      .bind(USER_ID)
-      .all<CollectibleRow>();
-    return result.results.map(toCollectibleItem);
   }
 
   async uploadMediaImage(
