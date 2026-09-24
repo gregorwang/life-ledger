@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import {
   addEntryFollowUpInputSchema,
   captureEntryInputSchema,
+  matchesEntryMediaSignature,
   confirmActionInputSchema,
   createGameLibraryItemInputSchema,
   importDryRunInputSchema,
@@ -17,12 +18,12 @@ import {
   updateGameLibraryItemInputSchema,
   type CoreBinding,
   type DashboardResponse,
+  type EntryMediaMimeType,
 } from "@life-ledger/contracts";
 
 import {
   EntryMediaUploadError,
   isEntryMediaKey,
-  matchesMediaSignature,
   parseByteRange,
   planEntryMediaUpload,
 } from "./entry-media";
@@ -78,6 +79,7 @@ function hasValidAuthConfiguration(env: Env): boolean {
 
 function isPublicPath(path: string, method: string): boolean {
   return (
+    (path.startsWith("/upload/entry-media/") && method === "PUT") ||
     path === "/public/v1/anime" ||
     path === "/public/v1/timeline" ||
     (
@@ -840,6 +842,59 @@ app.post("/api/v1/entries", async (context) => {
   return context.json(result, 201);
 });
 
+function uploadErrorResponse(
+  requestId: string,
+  code: string,
+  message: string,
+  status: number,
+): Response {
+  return Response.json(
+    { error: { code, message, requestId, retryable: false } },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+/**
+ * Streams an upload body to R2, then re-reads its first bytes to confirm the
+ * file really is the declared image/video type. Mismatches are deleted.
+ */
+async function storeEntryMediaObject(
+  bucket: R2Bucket,
+  target: {
+    objectKey: string;
+    mimeType: EntryMediaMimeType;
+    kind: "image" | "video";
+    sizeBytes: number;
+    source: "web" | "mcp";
+  },
+  body: ReadableStream,
+): Promise<boolean> {
+  const stored = await bucket.put(target.objectKey, body, {
+    httpMetadata: {
+      contentType: target.mimeType,
+      cacheControl: "private, max-age=31536000, immutable",
+      contentDisposition: "inline",
+    },
+    customMetadata: { kind: target.kind, source: target.source },
+  });
+  const headBytes = stored
+    ? await bucket.get(target.objectKey, { range: { offset: 0, length: 16 } })
+    : null;
+  const signature =
+    headBytes && "arrayBuffer" in headBytes
+      ? new Uint8Array(await headBytes.arrayBuffer())
+      : new Uint8Array();
+  if (
+    !stored ||
+    stored.size !== target.sizeBytes ||
+    !matchesEntryMediaSignature(target.mimeType, signature)
+  ) {
+    await bucket.delete(target.objectKey);
+    return false;
+  }
+  return true;
+}
+
 app.post("/api/v1/entry-media", async (context) => {
   let plan;
   try {
@@ -852,15 +907,10 @@ app.post("/api/v1/entry-media", async (context) => {
     });
   } catch (error: unknown) {
     if (error instanceof EntryMediaUploadError) {
-      return context.json(
-        {
-          error: {
-            code: error.code,
-            message: error.message,
-            requestId: context.get("requestId"),
-            retryable: false,
-          },
-        },
+      return uploadErrorResponse(
+        context.get("requestId"),
+        error.code,
+        error.message,
         error.status,
       );
     }
@@ -868,57 +918,26 @@ app.post("/api/v1/entry-media", async (context) => {
   }
   const body = context.req.raw.body;
   if (!body) {
-    return context.json(
-      {
-        error: {
-          code: "EMPTY_UPLOAD",
-          message: "上传内容为空。",
-          requestId: context.get("requestId"),
-          retryable: false,
-        },
-      },
-      400,
-    );
+    return uploadErrorResponse(context.get("requestId"), "EMPTY_UPLOAD", "上传内容为空。", 400);
   }
-
-  const stored = await context.env.MEDIA.put(plan.objectKey, body, {
-    httpMetadata: {
-      contentType: plan.mimeType,
-      cacheControl: "private, max-age=31536000, immutable",
-      contentDisposition: "inline",
-    },
-    customMetadata: { kind: plan.kind, source: "web" },
-  });
-  const headBytes = stored
-    ? await context.env.MEDIA.get(plan.objectKey, {
-        range: { offset: 0, length: 16 },
-      })
-    : null;
-  const signature =
-    headBytes && "arrayBuffer" in headBytes
-      ? new Uint8Array(await headBytes.arrayBuffer())
-      : new Uint8Array();
   if (
-    !stored ||
-    stored.size !== plan.sizeBytes ||
-    !matchesMediaSignature(plan.mimeType, signature)
+    !(await storeEntryMediaObject(
+      context.env.MEDIA,
+      { ...plan, source: "web" },
+      body,
+    ))
   ) {
-    await context.env.MEDIA.delete(plan.objectKey);
-    return context.json(
-      {
-        error: {
-          code: "MEDIA_CONTENT_MISMATCH",
-          message: "文件内容与声明的格式不一致，已拒绝保存。",
-          requestId: context.get("requestId"),
-          retryable: false,
-        },
-      },
+    return uploadErrorResponse(
+      context.get("requestId"),
+      "MEDIA_CONTENT_MISMATCH",
+      "文件内容与声明的格式不一致，已拒绝保存。",
       415,
     );
   }
 
   try {
     const media = await context.env.CORE.registerEntryMedia({
+      uploadedVia: "web",
       objectKey: plan.objectKey,
       kind: plan.kind,
       mimeType: plan.mimeType,
@@ -930,6 +949,88 @@ app.post("/api/v1/entry-media", async (context) => {
     return context.json(media, 201);
   } catch (error: unknown) {
     await context.env.MEDIA.delete(plan.objectKey);
+    throw error;
+  }
+});
+
+const UPLOAD_CLAIM_STATUS: Record<string, number> = {
+  ENTRY_MEDIA_UPLOAD_NOT_FOUND: 404,
+  ENTRY_MEDIA_UPLOAD_USED: 409,
+  ENTRY_MEDIA_UPLOAD_EXPIRED: 410,
+  ENTRY_MEDIA_UPLOAD_TYPE_MISMATCH: 415,
+  ENTRY_MEDIA_TOO_LARGE: 413,
+};
+
+// One-time upload URL issued to MCP agents by create_entry_media_upload.
+// The unguessable token is the credential, so no session cookie is needed.
+app.put("/upload/entry-media/:token", async (context) => {
+  const requestId = context.get("requestId");
+  const contentLength = context.req.header("content-length");
+  if (!contentLength || !/^\d+$/.test(contentLength)) {
+    return uploadErrorResponse(
+      requestId,
+      "LENGTH_REQUIRED",
+      "Content-Length is required; upload the file with curl --data-binary @file.",
+      411,
+    );
+  }
+  const mimeType =
+    context.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  let claim;
+  try {
+    claim = await context.env.CORE.claimEntryMediaUpload(
+      context.req.param("token"),
+      { mimeType, sizeBytes: Number(contentLength) },
+    );
+  } catch (error: unknown) {
+    const match =
+      error instanceof Error ? /^([A-Z][A-Z0-9_]+):\s*(.+)$/.exec(error.message) : null;
+    const status = match ? UPLOAD_CLAIM_STATUS[match[1]!] : undefined;
+    if (match && status) {
+      return uploadErrorResponse(requestId, match[1]!, match[2]!, status);
+    }
+    throw error;
+  }
+  const body = context.req.raw.body;
+  if (!body) {
+    return uploadErrorResponse(requestId, "EMPTY_UPLOAD", "Upload body is empty.", 400);
+  }
+  const sizeBytes = Number(contentLength);
+  if (
+    !(await storeEntryMediaObject(
+      context.env.MEDIA,
+      {
+        objectKey: claim.objectKey,
+        mimeType: claim.mimeType,
+        kind: claim.kind,
+        sizeBytes,
+        source: "mcp",
+      },
+      body,
+    ))
+  ) {
+    return uploadErrorResponse(
+      requestId,
+      "MEDIA_CONTENT_MISMATCH",
+      "File content does not match the declared type; request a new upload URL.",
+      415,
+    );
+  }
+  try {
+    const media = await context.env.CORE.registerEntryMedia({
+      mediaId: claim.mediaId,
+      uploadedVia: "mcp",
+      objectKey: claim.objectKey,
+      kind: claim.kind,
+      mimeType: claim.mimeType,
+      sizeBytes,
+      width: claim.width,
+      height: claim.height,
+      durationMs: claim.durationMs,
+    });
+    return context.json({ ok: true, data: media }, 201);
+  } catch (error: unknown) {
+    await context.env.MEDIA.delete(claim.objectKey);
     throw error;
   }
 });
@@ -1359,6 +1460,7 @@ app.onError((error, context) => {
       : code.includes("CONFLICT") ||
           code.includes("DELETED") ||
           code === "ENTRY_MEDIA_UNAVAILABLE" ||
+          code === "ENTRY_MEDIA_LIMIT_CONFLICT" ||
           code === "ENTRY_MEDIA_ATTACHED" ||
           code.includes("EXPIRED") ||
           code === "ACTION_CONSUMED"

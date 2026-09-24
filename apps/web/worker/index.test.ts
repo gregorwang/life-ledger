@@ -514,6 +514,95 @@ describe("Worker authentication boundary", () => {
     expect(unauthenticated.status).toBe(401);
   });
 
+  it("accepts one-time MCP upload URLs without a session and never twice", async () => {
+    const environment = createEnvironment();
+    const objects = new Map<string, Uint8Array>();
+    environment.MEDIA = {
+      put: vi.fn(async (key: string, value: ReadableStream) => {
+        const stored = new Uint8Array(await new Response(value).arrayBuffer());
+        objects.set(key, stored);
+        return { key, size: stored.byteLength };
+      }),
+      get: vi.fn(async (key: string) => {
+        const stored = objects.get(key);
+        return stored
+          ? { arrayBuffer: async () => stored.slice(0, 16).buffer }
+          : null;
+      }),
+      delete: vi.fn(async (key: string) => {
+        objects.delete(key);
+      }),
+    } as unknown as R2Bucket;
+    let claimed = false;
+    const claimEntryMediaUpload = vi.fn(
+      async (_token: string, request: { mimeType: string; sizeBytes: number }) => {
+        if (claimed) {
+          throw new Error("ENTRY_MEDIA_UPLOAD_USED: This upload URL has already been used.");
+        }
+        if (request.mimeType !== "video/webm") {
+          throw new Error("ENTRY_MEDIA_UPLOAD_TYPE_MISMATCH: Content-Type must be video/webm.");
+        }
+        claimed = true;
+        return {
+          mediaId: "media_abc_0123abcd",
+          objectKey: "entry-media/0b8f6a2e-5c1d-4f7a-9e3b-2d6c8a1f4e70.webm",
+          kind: "video",
+          mimeType: "video/webm",
+          maxBytes: 1000,
+          width: 640,
+          height: 360,
+          durationMs: 2000,
+        };
+      },
+    );
+    const registerEntryMedia = vi.fn(async (input: { mediaId: string }) => ({
+      id: input.mediaId,
+    }));
+    Object.assign(environment.CORE, { claimEntryMediaUpload, registerEntryMedia });
+    const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]);
+    const put = (contentType: string) =>
+      app.request(
+        "https://ledger.example.test/upload/entry-media/token-value",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": contentType,
+            "Content-Length": String(webm.byteLength),
+          },
+          body: webm.buffer as ArrayBuffer,
+        },
+        environment,
+      );
+
+    const wrongType = await put("video/mp4");
+    expect(wrongType.status).toBe(415);
+
+    const accepted = await put("video/webm");
+    expect(accepted.status).toBe(201);
+    await expect(accepted.json()).resolves.toEqual({
+      ok: true,
+      data: { id: "media_abc_0123abcd" },
+    });
+    expect(registerEntryMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaId: "media_abc_0123abcd",
+        uploadedVia: "mcp",
+        sizeBytes: 8,
+        durationMs: 2000,
+      }),
+    );
+
+    const replay = await put("video/webm");
+    expect(replay.status).toBe(409);
+
+    const getWithToken = await app.request(
+      "https://ledger.example.test/upload/entry-media/token-value",
+      {},
+      environment,
+    );
+    expect(getWithToken.status).toBe(401);
+  });
+
   it("clears the hardened session cookie on logout", async () => {
     const response = await app.request(
       "https://ledger.example.test/auth/logout",

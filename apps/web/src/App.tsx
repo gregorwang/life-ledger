@@ -103,7 +103,11 @@ import {
   type ToastMessage,
 } from "./models";
 import { GameLibraryPage } from "./GameLibraryPage";
-import { TimelineFeed, type NewPost } from "./TimelineFeed";
+import {
+  EntryAttachments,
+  TimelineFeed,
+  type NewPost,
+} from "./TimelineFeed";
 import {
   sortAnimeWorks,
   type AnimeLibrarySort,
@@ -2285,6 +2289,7 @@ function EntryDetailPage({
           </span>
         </div>
         <blockquote>{entry.bodyRaw}</blockquote>
+        <EntryAttachments entry={entry} timeZone={currentTimeZone()} />
         <div className="raw-source-footer">
           <span>
             <Clock3 aria-hidden="true" size={13} />

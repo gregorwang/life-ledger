@@ -80,7 +80,12 @@ export const ENTRY_MEDIA_LIMITS = {
   maxPerEntry: 9,
   maxImageBytes: 20 * 1024 * 1024,
   maxVideoBytes: 95 * 1024 * 1024,
+  /** Base64 uploads travel inside one MCP/RPC message, so keep them small. */
+  maxInlineBytes: 10 * 1024 * 1024,
+  uploadTicketMinutes: 30,
 } as const;
+
+export const ENTRY_MEDIA_ID_PATTERN = /^media_[a-z0-9]+_[a-f0-9]{8}$/;
 
 export const ENTRY_MEDIA_EXTENSIONS = {
   "image/jpeg": "jpg",
@@ -97,6 +102,8 @@ export const ENTRY_MEDIA_OBJECT_KEY_PATTERN =
 
 export const registerEntryMediaInputSchema = z
   .object({
+    mediaId: z.string().regex(ENTRY_MEDIA_ID_PATTERN).optional(),
+    uploadedVia: z.enum(["web", "mcp"]).default("web"),
     objectKey: z.string().regex(ENTRY_MEDIA_OBJECT_KEY_PATTERN),
     kind: entryMediaKindSchema,
     mimeType: entryMediaMimeTypeSchema,
@@ -127,6 +134,125 @@ export const registerEntryMediaInputSchema = z
         code: "custom",
         path: ["objectKey"],
         message: "objectKey extension must match the media MIME type.",
+      });
+    }
+  });
+
+function entryMediaSignatureAscii(
+  bytes: Uint8Array,
+  offset: number,
+  length: number,
+): string {
+  return String.fromCharCode(...bytes.subarray(offset, offset + length));
+}
+
+const QUICKTIME_ATOMS = new Set(["ftyp", "moov", "mdat", "wide", "free", "skip"]);
+
+/** Magic-byte check so a mislabeled upload cannot be stored as media. */
+export function matchesEntryMediaSignature(
+  mimeType: z.infer<typeof entryMediaMimeTypeSchema>,
+  head: Uint8Array,
+): boolean {
+  const ascii = (offset: number, length: number) =>
+    entryMediaSignatureAscii(head, offset, length);
+  switch (mimeType) {
+    case "image/jpeg":
+      return head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+    case "image/png":
+      return (
+        head.length >= 8 &&
+        head[0] === 0x89 &&
+        ascii(1, 3) === "PNG" &&
+        head[4] === 0x0d &&
+        head[5] === 0x0a &&
+        head[6] === 0x1a &&
+        head[7] === 0x0a
+      );
+    case "image/webp":
+      return ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP";
+    case "image/gif":
+      return ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a";
+    case "video/mp4":
+      return ascii(4, 4) === "ftyp";
+    case "video/quicktime":
+      return QUICKTIME_ATOMS.has(ascii(4, 4));
+    case "video/webm":
+      return (
+        head[0] === 0x1a &&
+        head[1] === 0x45 &&
+        head[2] === 0xdf &&
+        head[3] === 0xa3
+      );
+  }
+}
+
+export function entryMediaKindFor(
+  mimeType: z.infer<typeof entryMediaMimeTypeSchema>,
+): "image" | "video" {
+  return mimeType.startsWith("video/") ? "video" : "image";
+}
+
+export function entryMediaMaxBytes(
+  mimeType: z.infer<typeof entryMediaMimeTypeSchema>,
+): number {
+  return entryMediaKindFor(mimeType) === "video"
+    ? ENTRY_MEDIA_LIMITS.maxVideoBytes
+    : ENTRY_MEDIA_LIMITS.maxImageBytes;
+}
+
+const optionalDimensionSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(16_384)
+  .nullable()
+  .default(null);
+const optionalDurationSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(86_400_000)
+  .nullable()
+  .default(null);
+
+export const uploadEntryMediaInputSchema = z
+  .object({
+    fileName: z.string().trim().min(1).max(160),
+    mimeType: entryMediaMimeTypeSchema,
+    base64Data: z
+      .string()
+      .min(4)
+      .max(Math.ceil(ENTRY_MEDIA_LIMITS.maxInlineBytes / 3) * 4),
+    width: optionalDimensionSchema,
+    height: optionalDimensionSchema,
+    durationMs: optionalDurationSchema,
+  })
+  .strict();
+
+export const createEntryMediaUploadInputSchema = z
+  .object({
+    mimeType: entryMediaMimeTypeSchema,
+    sizeBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(ENTRY_MEDIA_LIMITS.maxVideoBytes)
+      .nullable()
+      .default(null),
+    width: optionalDimensionSchema,
+    height: optionalDimensionSchema,
+    durationMs: optionalDurationSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.sizeBytes !== null &&
+      value.sizeBytes > entryMediaMaxBytes(value.mimeType)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["sizeBytes"],
+        message: "The declared size exceeds the limit for this media type.",
       });
     }
   });
@@ -392,6 +518,18 @@ export const updateEntryInputSchema = z.object({
   reason: z.string().trim().min(1).max(300).default("manual edit"),
 });
 
+export const attachEntryMediaInputSchema = z
+  .object({
+    mediaIds: z
+      .array(z.string().trim().min(1).max(128))
+      .min(1)
+      .max(ENTRY_MEDIA_LIMITS.maxPerEntry)
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: "mediaIds must not contain duplicates.",
+      }),
+  })
+  .strict();
+
 export const addEntryFollowUpInputSchema = z
   .object({
     body: z.string().trim().min(1).max(50_000),
@@ -458,6 +596,10 @@ export type RegisterEntryMediaInput = z.infer<
   typeof registerEntryMediaInputSchema
 >;
 export type AddEntryFollowUpInput = z.infer<typeof addEntryFollowUpInputSchema>;
+export type UploadEntryMediaInput = z.infer<typeof uploadEntryMediaInputSchema>;
+export type CreateEntryMediaUploadInput = z.infer<
+  typeof createEntryMediaUploadInputSchema
+>;
 export type ConfirmActionInput = z.infer<typeof confirmActionInputSchema>;
 export type LedgerSettings = z.infer<typeof settingsSchema>;
 export type ImportDryRunInput = z.infer<typeof importDryRunInputSchema>;
@@ -483,6 +625,27 @@ export interface EntryMedia {
   height: number | null;
   durationMs: number | null;
   createdAt: string;
+}
+
+export interface EntryMediaUploadTicket {
+  mediaId: string;
+  uploadUrl: string;
+  method: "PUT";
+  headers: { "Content-Type": EntryMediaMimeType };
+  maxBytes: number;
+  expiresAt: string;
+  curlExample: string;
+}
+
+export interface EntryMediaUploadClaim {
+  mediaId: string;
+  objectKey: string;
+  kind: EntryMediaKind;
+  mimeType: EntryMediaMimeType;
+  maxBytes: number;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
 }
 
 export interface EntryFollowUp {
@@ -778,6 +941,16 @@ export interface CoreBinding {
   purgeEntry(id: string, confirmationId: string): Promise<{ id: string; purged: true }>;
   registerEntryMedia(input: RegisterEntryMediaInput): Promise<EntryMedia>;
   discardEntryMedia(id: string): Promise<{ id: string; discarded: true }>;
+  uploadEntryMedia(input: UploadEntryMediaInput): Promise<EntryMedia>;
+  createEntryMediaUpload(
+    input: CreateEntryMediaUploadInput,
+  ): Promise<EntryMediaUploadTicket>;
+  claimEntryMediaUpload(
+    token: string,
+    request: { mimeType: string; sizeBytes: number },
+  ): Promise<EntryMediaUploadClaim>;
+  attachEntryMedia(entryId: string, mediaIds: string[]): Promise<EntryDetail>;
+  deleteEntryMedia(entryId: string, mediaId: string): Promise<EntryDetail>;
   addEntryFollowUp(
     entryId: string,
     input: AddEntryFollowUpInput,

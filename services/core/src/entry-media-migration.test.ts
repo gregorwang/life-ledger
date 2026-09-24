@@ -17,6 +17,7 @@ const MIGRATIONS = [
   "0009_game_library_mutations.sql",
   "0010_drop_collectibles.sql",
   "0011_entry_media_and_follow_ups.sql",
+  "0012_entry_media_upload_tickets.sql",
 ];
 
 function openDatabase(): DatabaseSync {

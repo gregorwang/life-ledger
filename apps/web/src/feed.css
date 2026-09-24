@@ -1,6 +1,7 @@
 /* 今日与时间线 — a WeChat-Moments shell around an X-style single-column feed. */
 
-.feed-page {
+.feed-page,
+.feed-scope {
   --feed-ink: #16181c;
   --feed-sub: #5b6470;
   --feed-line: #e6e8ec;
@@ -1044,6 +1045,16 @@ button.feed-work-card:hover {
   to {
     transform: rotate(1turn);
   }
+}
+
+/* Entry detail page ----------------------------------------------------- */
+
+.entry-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--feed-ink);
 }
 
 /* Breakpoints ------------------------------------------------------------- */

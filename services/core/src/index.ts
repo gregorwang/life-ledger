@@ -6,8 +6,14 @@ import {
 } from "cloudflare:workers";
 
 import {
+  ENTRY_MEDIA_LIMITS,
   addEntryFollowUpInputSchema,
+  attachEntryMediaInputSchema,
   captureEntryInputSchema,
+  createEntryMediaUploadInputSchema,
+  entryMediaKindFor,
+  entryMediaMaxBytes,
+  matchesEntryMediaSignature,
   confirmActionInputSchema,
   createGameLibraryItemInputSchema,
   createMediaSeasonInputSchema,
@@ -18,6 +24,7 @@ import {
   listMediaWorksInputSchema,
   logMediaInputSchema,
   registerEntryMediaInputSchema,
+  uploadEntryMediaInputSchema,
   normalizeMediaTitle,
   publicAnimeResponseSchema,
   publicTimelineItemSchema,
@@ -29,6 +36,10 @@ import {
   updateMediaSeasonInputSchema,
   updateMediaWorkInputSchema,
   type AddEntryFollowUpInput,
+  type CreateEntryMediaUploadInput,
+  type EntryMediaUploadClaim,
+  type EntryMediaUploadTicket,
+  type UploadEntryMediaInput,
   type AnimeWorkDetail,
   type AnimeWorkSummary,
   type AuditEvent,
@@ -87,6 +98,13 @@ import {
   sha256HexBytes,
   type ExportTable,
 } from "./export-utils";
+import {
+  createEntryMediaObjectKey,
+  createUploadToken,
+  decodeEntryMediaBase64,
+  isWellFormedUploadToken,
+  uploadBaseOrigin,
+} from "./entry-media";
 import { mediaWatchStatusFromLegacyStatus } from "./media-import";
 import {
   MEDIA_WORK_AGGREGATE_SELECT,
@@ -102,6 +120,8 @@ interface Env extends MediaUploadEnvironment {
   BACKUPS: R2Bucket;
   MEDIA: R2Bucket;
   MEDIA_PUBLIC_BASE_URL: string;
+  /** Origin of the web worker that accepts one-time media uploads. */
+  WEB_ORIGIN?: string;
   EXPORT_WORKFLOW: Workflow<ExportWorkflowParams>;
 }
 
@@ -143,6 +163,19 @@ interface EntryMediaRow {
   height: number | null;
   duration_ms: number | null;
   created_at: string;
+}
+
+interface EntryMediaUploadTicketRow {
+  media_id: string;
+  object_key: string;
+  kind: EntryMedia["kind"];
+  mime_type: EntryMedia["mimeType"];
+  max_bytes: number;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  expires_at: string;
+  claimed_at: string | null;
 }
 
 interface EntryFollowUpRow {
@@ -2310,8 +2343,12 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
 
   async registerEntryMedia(input: RegisterEntryMediaInput): Promise<EntryMedia> {
     const parsed = registerEntryMediaInputSchema.parse(input);
-    const id = createId("media");
+    const id = parsed.mediaId ?? createId("media");
     const createdAt = nowIso();
+    const actor =
+      parsed.uploadedVia === "mcp"
+        ? { actorType: "agent", actorId: "mcp_client" }
+        : { actorType: "user", actorId: ACTOR_USER };
     await this.env.DB.batch([
       this.env.DB.prepare(`
         INSERT INTO entry_media (
@@ -2332,11 +2369,11 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       ),
       this.#auditStatement(
         createId("req"),
-        "user",
-        ACTOR_USER,
+        actor.actorType,
+        actor.actorId,
         "entry_media.uploaded",
         id,
-        `Entry ${parsed.kind} stored in R2 and awaiting attachment.`,
+        `Entry ${parsed.kind} stored in R2 via ${parsed.uploadedVia} and awaiting attachment.`,
         createdAt,
         "entry_media",
       ),
@@ -2354,6 +2391,277 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       );
     }
     return toEntryMedia(row);
+  }
+
+  async uploadEntryMedia(input: UploadEntryMediaInput): Promise<EntryMedia> {
+    const parsed = uploadEntryMediaInputSchema.parse(input);
+    const maxBytes = Math.min(
+      entryMediaMaxBytes(parsed.mimeType),
+      ENTRY_MEDIA_LIMITS.maxInlineBytes,
+    );
+    const bytes = decodeEntryMediaBase64(parsed.base64Data, maxBytes);
+    if (bytes === "too_large") {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_TOO_LARGE",
+        `Base64 uploads are limited to ${maxBytes} bytes; use create_entry_media_upload for larger files.`,
+        413,
+      );
+    }
+    if (bytes === "invalid") {
+      throw new LedgerDomainError(
+        "INVALID_BASE64",
+        "base64Data must be standard Base64 without a data: prefix or whitespace.",
+        422,
+      );
+    }
+    if (!matchesEntryMediaSignature(parsed.mimeType, bytes.subarray(0, 16))) {
+      throw new LedgerDomainError(
+        "MEDIA_CONTENT_MISMATCH",
+        "The file content does not match the declared mimeType.",
+        415,
+      );
+    }
+    const kind = entryMediaKindFor(parsed.mimeType);
+    const objectKey = createEntryMediaObjectKey(parsed.mimeType);
+    await this.env.MEDIA.put(objectKey, bytes, {
+      httpMetadata: {
+        contentType: parsed.mimeType,
+        cacheControl: "private, max-age=31536000, immutable",
+        contentDisposition: "inline",
+      },
+      customMetadata: { kind, source: "mcp" },
+    });
+    try {
+      return await this.registerEntryMedia({
+        uploadedVia: "mcp",
+        objectKey,
+        kind,
+        mimeType: parsed.mimeType,
+        sizeBytes: bytes.byteLength,
+        width: parsed.width,
+        height: parsed.height,
+        durationMs: kind === "video" ? parsed.durationMs : null,
+      });
+    } catch (error: unknown) {
+      await this.env.MEDIA.delete(objectKey);
+      throw error;
+    }
+  }
+
+  async createEntryMediaUpload(
+    input: CreateEntryMediaUploadInput,
+  ): Promise<EntryMediaUploadTicket> {
+    const parsed = createEntryMediaUploadInputSchema.parse(input);
+    const origin = uploadBaseOrigin(
+      this.env.WEB_ORIGIN,
+      this.env.MEDIA_PUBLIC_BASE_URL,
+    );
+    const mediaId = createId("media");
+    const token = createUploadToken();
+    const createdAt = nowIso();
+    const expiresAt = new Date(
+      Date.now() + ENTRY_MEDIA_LIMITS.uploadTicketMinutes * 60_000,
+    ).toISOString();
+    const maxBytes = entryMediaMaxBytes(parsed.mimeType);
+    const kind = entryMediaKindFor(parsed.mimeType);
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        INSERT INTO entry_media_upload_tickets (
+          media_id, user_id, token_hash, object_key, kind, mime_type,
+          max_bytes, width, height, duration_ms, created_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        mediaId,
+        USER_ID,
+        await sha256(token),
+        createEntryMediaObjectKey(parsed.mimeType),
+        kind,
+        parsed.mimeType,
+        maxBytes,
+        parsed.width,
+        parsed.height,
+        kind === "video" ? parsed.durationMs : null,
+        createdAt,
+        expiresAt,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        "agent",
+        "mcp_client",
+        "entry_media.upload_ticket_created",
+        mediaId,
+        `One-time ${kind} upload URL issued; expires ${expiresAt}.`,
+        createdAt,
+        "entry_media",
+      ),
+    ]);
+    const uploadUrl = `${origin}/upload/entry-media/${token}`;
+    return {
+      mediaId,
+      uploadUrl,
+      method: "PUT",
+      headers: { "Content-Type": parsed.mimeType },
+      maxBytes,
+      expiresAt,
+      curlExample: `curl -sS -X PUT -H 'Content-Type: ${parsed.mimeType}' --data-binary @<file> '${uploadUrl}'`,
+    };
+  }
+
+  async claimEntryMediaUpload(
+    token: string,
+    request: { mimeType: string; sizeBytes: number },
+  ): Promise<EntryMediaUploadClaim> {
+    const notFound = new LedgerDomainError(
+      "ENTRY_MEDIA_UPLOAD_NOT_FOUND",
+      "Upload URL is invalid.",
+      404,
+    );
+    if (!isWellFormedUploadToken(token)) {
+      throw notFound;
+    }
+    const tokenHash = await sha256(token);
+    const row = await this.env.DB.prepare(`
+      SELECT
+        media_id, object_key, kind, mime_type, max_bytes, width, height,
+        duration_ms, expires_at, claimed_at
+      FROM entry_media_upload_tickets
+      WHERE user_id = ? AND token_hash = ?
+    `)
+      .bind(USER_ID, tokenHash)
+      .first<EntryMediaUploadTicketRow>();
+    if (!row) {
+      throw notFound;
+    }
+    if (row.claimed_at !== null) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_USED",
+        "This upload URL has already been used; request a new one.",
+        409,
+      );
+    }
+    if (row.expires_at <= nowIso()) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_EXPIRED",
+        "This upload URL has expired; request a new one.",
+        410,
+      );
+    }
+    if (request.mimeType !== row.mime_type) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_TYPE_MISMATCH",
+        `Content-Type must be ${row.mime_type}.`,
+        415,
+      );
+    }
+    if (request.sizeBytes <= 0 || request.sizeBytes > row.max_bytes) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_TOO_LARGE",
+        `Upload must be between 1 and ${row.max_bytes} bytes.`,
+        413,
+      );
+    }
+    const claimed = await this.env.DB.prepare(`
+      UPDATE entry_media_upload_tickets
+      SET claimed_at = ?
+      WHERE user_id = ? AND token_hash = ? AND claimed_at IS NULL
+    `)
+      .bind(nowIso(), USER_ID, tokenHash)
+      .run();
+    if ((claimed.meta.changes ?? 0) === 0) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_USED",
+        "This upload URL has already been used; request a new one.",
+        409,
+      );
+    }
+    return {
+      mediaId: row.media_id,
+      objectKey: row.object_key,
+      kind: row.kind,
+      mimeType: row.mime_type,
+      maxBytes: row.max_bytes,
+      width: row.width,
+      height: row.height,
+      durationMs: row.duration_ms,
+    };
+  }
+
+  async attachEntryMedia(
+    entryId: string,
+    mediaIds: string[],
+  ): Promise<EntryDetail> {
+    const parsed = attachEntryMediaInputSchema.parse({ mediaIds });
+    const current = await this.#requireEntry(entryId);
+    if (current.status === "deleted") {
+      throw new LedgerDomainError(
+        "ENTRY_DELETED",
+        "Restore the entry before adding photos or videos.",
+        409,
+      );
+    }
+    if (
+      current.media.length + parsed.mediaIds.length >
+      ENTRY_MEDIA_LIMITS.maxPerEntry
+    ) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_LIMIT_CONFLICT",
+        `An entry holds at most ${ENTRY_MEDIA_LIMITS.maxPerEntry} photos or videos.`,
+        409,
+      );
+    }
+    await this.#assertAttachableMedia(parsed.mediaIds);
+    const attachedAt = nowIso();
+    await this.env.DB.batch([
+      ...this.#attachMediaStatements(
+        entryId,
+        parsed.mediaIds,
+        attachedAt,
+        current.media.length,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        "agent",
+        "mcp_client",
+        "entry.media_attached",
+        entryId,
+        `${parsed.mediaIds.length} photo/video item(s) attached.`,
+        attachedAt,
+      ),
+    ]);
+    return this.#requireEntry(entryId);
+  }
+
+  async deleteEntryMedia(entryId: string, mediaId: string): Promise<EntryDetail> {
+    await this.#requireEntry(entryId);
+    const row = await this.env.DB.prepare(`
+      SELECT object_key FROM entry_media
+      WHERE user_id = ? AND entry_id = ? AND id = ?
+    `)
+      .bind(USER_ID, entryId, mediaId)
+      .first<{ object_key: string }>();
+    if (!row) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_NOT_FOUND",
+        "This photo or video is not attached to the entry.",
+        404,
+      );
+    }
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        DELETE FROM entry_media WHERE user_id = ? AND entry_id = ? AND id = ?
+      `).bind(USER_ID, entryId, mediaId),
+      this.#auditStatement(
+        createId("req"),
+        "user",
+        ACTOR_USER,
+        "entry.media_removed",
+        entryId,
+        "A photo or video was removed from the entry and deleted from R2.",
+        nowIso(),
+      ),
+    ]);
+    await this.env.MEDIA.delete(row.object_key);
+    return this.#requireEntry(entryId);
   }
 
   async discardEntryMedia(id: string): Promise<{ id: string; discarded: true }> {
@@ -4014,13 +4322,14 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     entryId: string,
     mediaIds: string[],
     attachedAt: string,
+    startPosition = 0,
   ): D1PreparedStatement[] {
-    return mediaIds.map((mediaId, position) =>
+    return mediaIds.map((mediaId, index) =>
       this.env.DB.prepare(`
         UPDATE entry_media
         SET entry_id = ?, position = ?, attached_at = ?
         WHERE user_id = ? AND id = ? AND entry_id IS NULL
-      `).bind(entryId, position, attachedAt, USER_ID, mediaId),
+      `).bind(entryId, startPosition + index, attachedAt, USER_ID, mediaId),
     );
   }
 

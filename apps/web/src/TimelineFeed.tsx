@@ -227,6 +227,52 @@ export function TimelineFeed(props: TimelineFeedProps) {
   );
 }
 
+/** Photos, videos and follow-ups for the entry detail page. */
+export function EntryAttachments({
+  entry,
+  timeZone,
+}: {
+  entry: LedgerEntry;
+  timeZone: string;
+}) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const now = useMemo(() => new Date(), [entry]);
+  if (!entry.media.length && !entry.followUps.length) {
+    return null;
+  }
+  return (
+    <div className="feed-scope entry-attachments">
+      {entry.media.length ? (
+        <PostMediaGrid media={entry.media} onOpen={setLightboxIndex} />
+      ) : null}
+      {entry.followUps.length ? (
+        <ol className="feed-follow-ups" aria-label="补充">
+          {entry.followUps.map((followUp) => (
+            <li key={followUp.id}>
+              <div className="feed-follow-up-meta">
+                <CornerDownRight aria-hidden="true" size={13} />
+                <span>
+                  补充 · {relativeTime(followUp.createdAt, now, timeZone)} · 来自
+                  {SOURCE_LABELS[followUp.sourceChannel]}
+                </span>
+              </div>
+              <p>{followUp.body}</p>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {lightboxIndex !== null ? (
+        <MediaLightbox
+          media={entry.media}
+          index={lightboxIndex}
+          onIndex={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function Avatar({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (
     <span className={`feed-avatar feed-avatar-${size}`} aria-hidden="true">

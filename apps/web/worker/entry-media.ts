@@ -3,6 +3,7 @@ import {
   ENTRY_MEDIA_LIMITS,
   ENTRY_MEDIA_OBJECT_KEY_PATTERN,
   entryMediaMimeTypeSchema,
+  matchesEntryMediaSignature,
   type EntryMediaMimeType,
 } from "@life-ledger/contracts";
 
@@ -106,47 +107,7 @@ export function planEntryMediaUpload(input: {
   };
 }
 
-function ascii(bytes: Uint8Array, offset: number, length: number): string {
-  return String.fromCharCode(...bytes.subarray(offset, offset + length));
-}
-
-const QUICKTIME_ATOMS = new Set(["ftyp", "moov", "mdat", "wide", "free", "skip"]);
-
-/** Magic-byte check so a mislabeled upload cannot be served as media. */
-export function matchesMediaSignature(
-  mimeType: EntryMediaMimeType,
-  head: Uint8Array,
-): boolean {
-  switch (mimeType) {
-    case "image/jpeg":
-      return head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
-    case "image/png":
-      return (
-        head.length >= 8 &&
-        head[0] === 0x89 &&
-        ascii(head, 1, 3) === "PNG" &&
-        head[4] === 0x0d &&
-        head[5] === 0x0a &&
-        head[6] === 0x1a &&
-        head[7] === 0x0a
-      );
-    case "image/webp":
-      return ascii(head, 0, 4) === "RIFF" && ascii(head, 8, 4) === "WEBP";
-    case "image/gif":
-      return ascii(head, 0, 6) === "GIF87a" || ascii(head, 0, 6) === "GIF89a";
-    case "video/mp4":
-      return ascii(head, 4, 4) === "ftyp";
-    case "video/quicktime":
-      return QUICKTIME_ATOMS.has(ascii(head, 4, 4));
-    case "video/webm":
-      return (
-        head[0] === 0x1a &&
-        head[1] === 0x45 &&
-        head[2] === 0xdf &&
-        head[3] === 0xa3
-      );
-  }
-}
+export { matchesEntryMediaSignature as matchesMediaSignature };
 
 export function isEntryMediaKey(key: string): boolean {
   return ENTRY_MEDIA_OBJECT_KEY_PATTERN.test(key);

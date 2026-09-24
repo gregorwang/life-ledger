@@ -29,6 +29,7 @@ const migrations = [
   "migrations/0009_game_library_mutations.sql",
   "migrations/0010_drop_collectibles.sql",
   "migrations/0011_entry_media_and_follow_ups.sql",
+  "migrations/0012_entry_media_upload_tickets.sql",
 ].map(readProjectFile);
 
 function openMigratedDatabase(): DatabaseSync {
