@@ -83,6 +83,46 @@ pnpm deploy:mcp
 pnpm deploy:web
 ```
 
+### 数据库迁移
+
+生产库的结构变更都在 `migrations/`，按文件名顺序执行，已执行过的会自动跳过，所以
+重复执行 `pnpm db:migrate:remote` 是安全的。**有新迁移时，先迁移，再部署 Core / MCP / Web。**
+
+查看生产库执行到了哪一个：
+
+```bash
+npx wrangler d1 migrations list life-ledger-prod --remote --config services/core/wrangler.jsonc
+```
+
+显示 “No migrations to apply” 就是已经是最新。
+
+#### 0016_entry_links_work（心情 / 想法关联番剧影视）
+
+- **做了什么**：重建 `entry_links` 表，让一条动态除了书、音乐、地点、游戏，也能关联
+  番剧 / 影视作品（`target_kind = 'work'`）。旧的关联会原样复制过去，索引一起重建，
+  不改其他表，也不删任何数据。
+- **怎么执行**：若 Core 的 Workers Builds 部署命令里带着
+  `npx wrangler d1 migrations apply life-ledger-prod --remote`（见下表），推送后会自动执行；
+  否则在本机跑一次：
+
+  ```bash
+  pnpm db:migrate:remote
+  ```
+
+- **怎么确认**：
+
+  ```bash
+  npx wrangler d1 execute life-ledger-prod --remote --config services/core/wrangler.jsonc \
+    --command "SELECT sql FROM sqlite_master WHERE name = 'entry_links'"
+  ```
+
+  输出里的 `CHECK (target_kind IN ('shelf', 'place', 'game', 'work'))` 带着 `'work'` 就是成功了。
+- **没执行会怎样**：只有“把一条心情 / 想法关联到某部番剧或影视”会报错（MCP 的
+  `capture_entry` 带 `aboutId: "work_…"`）；看番记心情（`log_media` 的 `mood`）、点亮地图、
+  其他功能都不受影响。执行后立即恢复，不需要重新部署。
+- **回退**：新表兼容旧代码，回退代码版本不需要回退数据库。若想额外保险，迁移前可在
+  Cloudflare 控制台 D1 → `life-ledger-prod` → Time Travel 记下当前时间点，出问题可恢复到该时刻。
+
 ### 通过 Git 连接自动构建（Workers Builds）
 
 这是 pnpm monorepo，仓库根目录没有 Wrangler 配置；在根目录执行
