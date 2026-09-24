@@ -82,6 +82,28 @@ pnpm deploy:mcp
 pnpm deploy:web
 ```
 
+### 通过 Git 连接自动构建（Workers Builds）
+
+这是 pnpm monorepo，仓库根目录没有 Wrangler 配置；在根目录执行
+`npx wrangler deploy` 会报 “application detection logic has been run in the root of a
+workspace”。每个 Worker 要在 Cloudflare 控制台 **Settings → Build** 里单独设置
+**Root directory**，构建和部署命令保持默认即可：
+
+| Worker | Root directory | Build command | Deploy command |
+| --- | --- | --- | --- |
+| `life-ledger-core` | `services/core` | `pnpm run build` | `npx wrangler d1 migrations apply life-ledger-prod --remote && npx wrangler deploy` |
+| `life-ledger-mcp` | `apps/mcp` | `pnpm run build` | `npx wrangler deploy` |
+| `life-ledger-web` | `apps/web` | `pnpm run build` | `npx wrangler deploy` |
+
+- 依赖仍由根目录的 `pnpm-lock.yaml` 安装，子目录里执行 `pnpm install` 会安装整个 workspace。
+- Web 的 `vite build` 会写出 `apps/web/.wrangler/deploy/config.json`，让
+  `npx wrangler deploy` 自动使用构建产物 `dist/life_ledger_web/wrangler.json`；它只部署
+  Web 本身，Core 需要由自己的 Worker 构建部署。
+- Core 的部署命令先迁移 D1；若构建令牌没有 D1 编辑权限，就把这一步改为本地执行
+  `pnpm db:migrate:remote`，部署命令只保留 `npx wrangler deploy`。
+- Web 的 `AUTH_PASSWORD`、`AUTH_SESSION_SECRET` 在 Worker 的 Secrets 里配置；构建日志里的
+  “Missing required secrets” 警告不影响部署。
+
 ## 数据安全规则
 
 - 新记录永远默认 `private`
