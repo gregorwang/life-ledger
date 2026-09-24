@@ -236,8 +236,22 @@ const savePlaceToolSchema = z.object({
   name: z.string().trim().min(1).max(200).optional().describe("地点名；新建时必填"),
   visitedOn: localDate.optional().describe("到达日期；新建时缺省为今天"),
   leftOn: localDate.nullable().optional(),
-  city: z.string().trim().min(1).max(100).nullable().optional(),
-  country: z.string().trim().min(1).max(100).nullable().optional(),
+  city: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .nullable()
+    .optional()
+    .describe("所在城市，例如 杭州、京都；足迹地图靠它点亮省份，尽量填"),
+  country: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .nullable()
+    .optional()
+    .describe("国家或地区，例如 中国、日本、香港；足迹地图靠它点亮国家，尽量填"),
   category: placeCategorySchema
     .optional()
     .describe("city 城市 / sight 景点 / food 吃喝 / stay 住宿 / nature 自然 / event 活动 / other"),

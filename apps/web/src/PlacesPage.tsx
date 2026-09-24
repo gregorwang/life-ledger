@@ -9,9 +9,10 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type FormEvent, lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { createPlace, deletePlace, loadPlaces, updatePlace } from "./api";
+import type { FootprintFilter } from "./FootprintMap";
 import type { ToastMessage } from "./models";
 import { RelatedEntries } from "./RelatedEntries";
 import { Select } from "./Select";
@@ -19,8 +20,12 @@ import { ShelfDialog, splitTags, uploadCoverImage } from "./ShelfPage";
 import type { NewPost } from "./TimelineFeed";
 import "./shelf.css";
 import "./places.css";
+import "./footprint-map.css";
 
 type PushToast = (tone: ToastMessage["tone"], title: string, detail: string) => void;
+
+// The map and its outline data only load on this page.
+const FootprintMap = lazy(() => import("./FootprintMap"));
 
 const CATEGORIES: ReadonlyArray<readonly [PlaceCategory, string]> = [
   ["city", "城市"],
@@ -88,6 +93,7 @@ export function PlacesPage({
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Place | "new" | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [mapFilter, setMapFilter] = useState<FootprintFilter | null>(null);
   const focusedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -126,14 +132,15 @@ export function PlacesPage({
   );
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const inRegion = mapFilter ? sorted.filter((place) => mapFilter.placeIds.has(place.id)) : sorted;
     return needle
-      ? sorted.filter((place) =>
+      ? inRegion.filter((place) =>
           [place.name, place.city, place.country, place.trip, ...place.tags]
             .filter(Boolean)
             .some((value) => value!.toLowerCase().includes(needle)),
         )
-      : sorted;
-  }, [query, sorted]);
+      : inRegion;
+  }, [mapFilter, query, sorted]);
   const cities = new Set(places.map((place) => place.city).filter(Boolean)).size;
   const countries = new Set(places.map((place) => place.country).filter(Boolean)).size;
   const trips = new Set(places.map((place) => place.trip).filter(Boolean));
@@ -191,6 +198,19 @@ export function PlacesPage({
           </button>
         </div>
       </header>
+
+      {state === "ready" ? (
+        <Suspense
+          fallback={
+            <section className="fp-map is-message" aria-label="足迹地图" role="status">
+              <LoaderCircle className="sh-spin" aria-hidden="true" size={18} />
+              正在展开地图…
+            </section>
+          }
+        >
+          <FootprintMap places={places} filter={mapFilter} onFilter={setMapFilter} />
+        </Suspense>
+      ) : null}
 
       {places.length > 4 ? (
         <div className="sh-toolbar">

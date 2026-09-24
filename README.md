@@ -6,6 +6,7 @@ Life Ledger 是一个默认私有、保留原文、可修订、可撤回、可�
 
 - React + Vite + Cloudflare Workers Static Assets 管理端
 - 响应式「日常」动态（可自定义头像、背景、名字与签名，带表情与心情选择）、动漫库、游戏库、书架、音乐、足迹、年度回顾（心情日历）、那年今日、作品详情、记录详情、搜索、导入、导出、设置和回收站
+- 足迹「点亮地图」：中国（省级）/ 世界两张离线地图，按去过的地方数量着色，点地区筛选列表；不调用任何地图服务、不需要 API key。边界来自 Natural Earth（公共领域，世界图用中国视角版），城市和区县对照来自 `china-division`，由 `scripts/build-footprint-map.mjs` 生成 `apps/web/src/geo/footprint-map.json`
 - 私人 / 待确认 / 公开状态机，以及发布预览 + 文本确认
 - 软删除、恢复为私人、永久清除文本确认
 - D1 schema migration、独立开发 seed、Core WorkerEntrypoint RPC

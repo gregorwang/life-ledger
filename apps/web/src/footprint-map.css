@@ -1,0 +1,260 @@
+/* 足迹 「点亮地图」 — offline outlines, lit by how many places were visited. */
+
+.fp-map {
+  --fp-land: #eceff0;
+  --fp-land-line: #ffffff;
+  --fp-lv1: color-mix(in srgb, var(--sh-accent) 40%, #ffffff);
+  --fp-lv2: color-mix(in srgb, var(--sh-accent) 68%, #ffffff);
+  --fp-lv3: var(--sh-accent);
+  --fp-ink-strong: color-mix(in srgb, var(--sh-accent) 55%, #000000);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 18px 20px 16px;
+  border: 1px solid var(--sh-line);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 0 18px 50px rgb(20 40 70 / 7%);
+  backdrop-filter: blur(10px);
+}
+
+.fp-map.is-message {
+  min-height: 220px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  color: var(--sh-sub);
+  font-size: 14px;
+}
+
+.fp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.fp-lit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--sh-sub);
+  font-size: 14px;
+}
+
+.fp-lit svg {
+  color: var(--sh-accent);
+}
+
+.fp-lit strong {
+  color: var(--sh-ink);
+  font-size: 22px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.fp-tabs {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--sh-soft);
+}
+
+.fp-tabs button {
+  min-width: 64px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sh-sub);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-tabs button.is-active {
+  background: var(--sh-card);
+  color: var(--sh-ink);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+}
+
+.fp-tabs button:focus-visible {
+  outline: 2px solid var(--sh-accent);
+  outline-offset: 1px;
+}
+
+.fp-canvas {
+  position: relative;
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.fp-canvas svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(62vh, 560px);
+}
+
+.fp-region {
+  fill: var(--fp-land);
+  stroke: var(--fp-land-line);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  transition: fill 160ms ease, filter 160ms ease;
+}
+
+.fp-region.is-lv1 {
+  fill: var(--fp-lv1);
+}
+
+.fp-region.is-lv2 {
+  fill: var(--fp-lv2);
+}
+
+.fp-region.is-lv3 {
+  fill: var(--fp-lv3);
+}
+
+.fp-region:not(.is-lv0) {
+  cursor: pointer;
+}
+
+.fp-region:not(.is-lv0):hover {
+  filter: brightness(0.93);
+}
+
+.fp-region:focus-visible,
+.fp-region.is-selected {
+  outline: none;
+  stroke: var(--fp-ink-strong);
+  stroke-width: 2;
+}
+
+.fp-dots circle {
+  fill: #ffffff;
+  stroke: var(--fp-ink-strong);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.fp-tooltip {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  max-width: 240px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgb(17 24 28 / 92%);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  transform: translate(12px, -110%);
+}
+
+.fp-tooltip strong {
+  font-size: 13px;
+}
+
+.fp-tooltip .is-empty {
+  color: rgb(255 255 255 / 60%);
+}
+
+.fp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.fp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  color: var(--sh-sub);
+  font-size: 12px;
+  list-style: none;
+}
+
+.fp-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fp-swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.fp-swatch.is-lv1 {
+  background: var(--fp-lv1);
+}
+
+.fp-swatch.is-lv2 {
+  background: var(--fp-lv2);
+}
+
+.fp-swatch.is-lv3 {
+  background: var(--fp-lv3);
+}
+
+.fp-hint {
+  color: var(--sh-faint);
+  font-size: 12px;
+}
+
+.fp-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--sh-accent);
+  border-radius: 999px;
+  background: var(--sh-accent-soft);
+  color: var(--fp-ink-strong);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-unresolved {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--sh-soft);
+  color: var(--sh-sub);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .fp-map {
+    padding: 14px 12px 12px;
+  }
+
+  .fp-hint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-region {
+    transition: none;
+  }
+}
