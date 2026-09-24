@@ -54,6 +54,12 @@ function createCore(
     preparePublish: failUnexpectedCall,
     confirmAction: failUnexpectedCall,
     unpublishEntry: failUnexpectedCall,
+    addEntryFollowUp: failUnexpectedCall,
+    deleteEntryFollowUp: failUnexpectedCall,
+    uploadEntryMedia: failUnexpectedCall,
+    createEntryMediaUpload: failUnexpectedCall,
+    attachEntryMedia: failUnexpectedCall,
+    deleteEntryMedia: failUnexpectedCall,
     createImportDryRun: failUnexpectedCall,
     commitImport: failUnexpectedCall,
     createExport: failUnexpectedCall,
@@ -134,6 +140,12 @@ const expectedToolNames = [
   "prepare_publish",
   "confirm_action",
   "unpublish_entry",
+  "upload_entry_media",
+  "create_entry_media_upload",
+  "attach_entry_media",
+  "remove_entry_media",
+  "add_entry_follow_up",
+  "delete_entry_follow_up",
   "import_dry_run",
   "import_commit",
   "export_create",
@@ -190,6 +202,12 @@ describe("Life Ledger MCP 工具契约", () => {
         ]),
       );
       expect(required("import_commit")).toContain("confirmCommit");
+      expect(required("remove_entry_media")).toContain("confirmRemove");
+      expect(required("delete_entry_follow_up")).toContain("confirmDelete");
+      expect(required("upload_entry_media")).toEqual(
+        expect.arrayContaining(["fileName", "mimeType", "base64Data"]),
+      );
+      expect(required("create_entry_media_upload")).toContain("mimeType");
     });
   });
 
@@ -535,6 +553,126 @@ describe("Life Ledger MCP 工具契约", () => {
     expect(commitImport).toHaveBeenCalledWith("import_001");
     expect(verifyExport).toHaveBeenCalledWith("export_001");
     expect(getSettings).toHaveBeenCalledOnce();
+  });
+
+  it("通过 MCP 上传照片/视频并把 mediaId 挂到动态上", async () => {
+    const uploadedMedia = {
+      id: "media_abc_0123abcd",
+      kind: "image" as const,
+      mimeType: "image/jpeg" as const,
+      url: "/media/entry-media/0b8f6a2e-5c1d-4f7a-9e3b-2d6c8a1f4e70.jpg",
+      sizeBytes: 4,
+      width: null,
+      height: null,
+      durationMs: null,
+      createdAt: "2026-09-24T03:00:00.000Z",
+    };
+    const uploadEntryMedia = vi.fn(async () => uploadedMedia);
+    const createEntryMediaUpload = vi.fn(async () => ({
+      mediaId: "media_def_4567cdef",
+      uploadUrl: "https://ledger.example.test/upload/entry-media/token",
+      method: "PUT" as const,
+      headers: { "Content-Type": "video/mp4" as const },
+      maxBytes: 95 * 1024 * 1024,
+      expiresAt: "2026-09-24T03:30:00.000Z",
+      curlExample: "curl -X PUT ...",
+    }));
+    const captureEntry = vi.fn(async (): Promise<never> => {
+      throw new Error("CAPTURE_STOP");
+    });
+    const attachEntryMedia = vi.fn(async (): Promise<never> => {
+      throw new Error("ATTACH_STOP");
+    });
+    const deleteEntryMedia = vi.fn(async (): Promise<never> => {
+      throw new Error("REMOVE_STOP");
+    });
+    const deleteEntryFollowUp = vi.fn(async (): Promise<never> => {
+      throw new Error("FOLLOW_UP_STOP");
+    });
+
+    await withClient(
+      createCore({
+        uploadEntryMedia,
+        createEntryMediaUpload,
+        captureEntry,
+        attachEntryMedia,
+        deleteEntryMedia,
+        deleteEntryFollowUp,
+      }),
+      async (client) => {
+        const upload = await client.callTool({
+          name: "upload_entry_media",
+          arguments: {
+            fileName: "IMG_0001.jpg",
+            mimeType: "image/jpeg",
+            base64Data: "/9j/4A==",
+          },
+        });
+        expect(JSON.parse(responseText(upload))).toEqual({
+          ok: true,
+          data: uploadedMedia,
+        });
+
+        const ticket = await client.callTool({
+          name: "create_entry_media_upload",
+          arguments: { mimeType: "video/mp4", sizeBytes: 30_000_000 },
+        });
+        expect(JSON.parse(responseText(ticket)).data.uploadUrl).toContain(
+          "/upload/entry-media/",
+        );
+
+        await client.callTool({
+          name: "capture_entry",
+          arguments: {
+            rawText: "周末去海边，拍了照片和一段视频。",
+            sourceChannel: "wechat",
+            idempotencyKey: "wx-media-001",
+            mediaIds: ["media_abc_0123abcd", "media_def_4567cdef"],
+          },
+        });
+        await client.callTool({
+          name: "attach_entry_media",
+          arguments: { entryId: "ent_1", mediaIds: ["media_abc_0123abcd"] },
+        });
+        const refused = await client.callTool({
+          name: "remove_entry_media",
+          arguments: { entryId: "ent_1", mediaId: "media_abc_0123abcd" },
+        });
+        expect("isError" in refused && refused.isError).toBe(true);
+        await client.callTool({
+          name: "remove_entry_media",
+          arguments: {
+            entryId: "ent_1",
+            mediaId: "media_abc_0123abcd",
+            confirmRemove: true,
+          },
+        });
+        await client.callTool({
+          name: "delete_entry_follow_up",
+          arguments: {
+            entryId: "ent_1",
+            followUpId: "followup_1",
+            confirmDelete: true,
+          },
+        });
+      },
+    );
+
+    expect(uploadEntryMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ fileName: "IMG_0001.jpg", mimeType: "image/jpeg" }),
+    );
+    expect(createEntryMediaUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ mimeType: "video/mp4", sizeBytes: 30_000_000 }),
+    );
+    expect(captureEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaIds: ["media_abc_0123abcd", "media_def_4567cdef"],
+      }),
+    );
+    expect(attachEntryMedia).toHaveBeenCalledWith("ent_1", ["media_abc_0123abcd"]);
+    expect(deleteEntryMedia).toHaveBeenCalledOnce();
+    expect(deleteEntryMedia).toHaveBeenCalledWith("ent_1", "media_abc_0123abcd");
+    expect(deleteEntryFollowUp).toHaveBeenCalledWith("ent_1", "followup_1");
   });
 
   it("通过专用工具创建、更新、删除和恢复 PlayStation 游戏", async () => {

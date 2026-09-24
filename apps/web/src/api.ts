@@ -2,6 +2,7 @@ import type {
   AnimeWorkSummary,
   DashboardResponse,
   EntryDetail,
+  EntryMedia,
   EntrySummary,
   ExportRecord as ApiExportRecord,
   ExportVerification,
@@ -16,6 +17,7 @@ import type {
 import type {
   AnimeWork,
   CaptureDraft,
+  EntryMediaItem,
   ExportRecord,
   LedgerEntry,
   ScreenWork,
@@ -89,6 +91,13 @@ export function mapEntry(
       ? { mediaKind: candidateMediaKind }
       : {}),
     versionNo: entry.versionNo,
+    media: (entry.media ?? []).map(mapEntryMedia),
+    followUps: (entry.followUps ?? []).map((followUp) => ({
+      id: followUp.id,
+      body: followUp.body,
+      sourceChannel: followUp.sourceChannel,
+      createdAt: followUp.createdAt,
+    })),
     revisions:
       detail?.revisions.map((revision) => ({
         id: revision.id,
@@ -113,6 +122,18 @@ export function mapEntry(
         detail: event.detail,
         createdAt: event.createdAt,
       })) ?? [],
+  };
+}
+
+function mapEntryMedia(media: EntryMedia): EntryMediaItem {
+  return {
+    id: media.id,
+    kind: media.kind,
+    mimeType: media.mimeType,
+    url: media.url,
+    width: media.width,
+    height: media.height,
+    durationMs: media.durationMs,
   };
 }
 
@@ -301,6 +322,7 @@ export async function createEntry(
             timezone: window.localStorage.getItem("life-ledger.timezone") || "Asia/Tokyo",
             source,
             visibility: "private",
+            mediaIds: draft.mediaIds,
           }),
         })
       : await requestJson<MutationResult>("/api/v1/entries", {
@@ -312,12 +334,106 @@ export async function createEntry(
             occurredAt: now,
             timezone: window.localStorage.getItem("life-ledger.timezone") || "Asia/Tokyo",
             temporalUncertain: false,
-            tags: [draft.type],
+            tags: [...new Set([draft.type, ...(draft.tags ?? [])])],
             source,
             visibility: "private",
+            mediaIds: draft.mediaIds,
           }),
         });
   return mapEntry(result.entry);
+}
+
+export interface MediaUploadMetadata {
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+}
+
+/**
+ * Streams one photo or video to the authenticated upload route. XHR is used
+ * instead of fetch because fetch cannot report upload progress.
+ */
+export function uploadEntryMedia(
+  file: Blob,
+  mimeType: string,
+  metadata: MediaUploadMetadata,
+  onProgress: (fraction: number) => void,
+): { promise: Promise<EntryMediaItem>; abort: () => void } {
+  const request = new XMLHttpRequest();
+  const params = new URLSearchParams();
+  if (metadata.width) params.set("width", String(Math.round(metadata.width)));
+  if (metadata.height) params.set("height", String(Math.round(metadata.height)));
+  if (metadata.durationMs !== null) {
+    params.set("durationMs", String(Math.round(metadata.durationMs)));
+  }
+  const promise = new Promise<EntryMediaItem>((resolve, reject) => {
+    request.open("POST", `/api/v1/entry-media?${params.toString()}`);
+    request.setRequestHeader("Content-Type", mimeType);
+    request.setRequestHeader("Accept", "application/json");
+    request.responseType = "json";
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress(event.loaded / event.total);
+      }
+    };
+    request.onload = () => {
+      const payload: unknown = request.response;
+      if (request.status >= 200 && request.status < 300 && payload) {
+        resolve(mapEntryMedia(payload as EntryMedia));
+        return;
+      }
+      const message =
+        typeof payload === "object" &&
+        payload !== null &&
+        "error" in payload &&
+        typeof payload.error === "object" &&
+        payload.error !== null &&
+        "message" in payload.error &&
+        typeof payload.error.message === "string"
+          ? payload.error.message
+          : `上传失败（${request.status}）`;
+      reject(new Error(message));
+    };
+    request.onerror = () => reject(new Error("网络中断，上传失败。"));
+    request.onabort = () =>
+      reject(new DOMException("Upload aborted", "AbortError"));
+    request.send(file);
+  });
+  return { promise, abort: () => request.abort() };
+}
+
+export async function discardEntryMedia(id: string): Promise<void> {
+  await requestJson<{ id: string; discarded: true }>(
+    `/api/v1/entry-media/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function addEntryFollowUp(
+  entryId: string,
+  body: string,
+): Promise<LedgerEntry> {
+  return mapEntry(
+    await requestJson<EntryDetail>(
+      `/api/v1/entries/${encodeURIComponent(entryId)}/follow-ups`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body, sourceChannel: "web" }),
+      },
+    ),
+  );
+}
+
+export async function deleteEntryFollowUp(
+  entryId: string,
+  followUpId: string,
+): Promise<LedgerEntry> {
+  return mapEntry(
+    await requestJson<EntryDetail>(
+      `/api/v1/entries/${encodeURIComponent(entryId)}/follow-ups/${encodeURIComponent(followUpId)}`,
+      { method: "DELETE" },
+    ),
+  );
 }
 
 export async function updateEntryBody(

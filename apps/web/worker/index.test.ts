@@ -393,6 +393,216 @@ describe("Worker authentication boundary", () => {
     expect(rateLimitedResponse.headers.get("retry-after")).toBe("60");
   });
 
+  it("stores verified entry media in R2 and discards mislabeled uploads", async () => {
+    const environment = createEnvironment();
+    const objects = new Map<string, Uint8Array>();
+    const put = vi.fn(async (key: string, value: ReadableStream) => {
+      const stored = new Uint8Array(await new Response(value).arrayBuffer());
+      objects.set(key, stored);
+      return { key, size: stored.byteLength };
+    });
+    const get = vi.fn(
+      async (key: string, options?: { range?: { offset: number; length: number } }) => {
+        const stored = objects.get(key);
+        if (!stored) {
+          return null;
+        }
+        const slice = options?.range
+          ? stored.slice(options.range.offset, options.range.offset + options.range.length)
+          : stored;
+        return {
+          size: stored.byteLength,
+          httpEtag: '"etag"',
+          httpMetadata: { contentType: "image/jpeg" },
+          writeHttpMetadata: () => undefined,
+          body: new Response(slice.buffer as ArrayBuffer).body,
+          arrayBuffer: async () => slice.buffer,
+        };
+      },
+    );
+    const head = vi.fn(async (key: string) =>
+      objects.has(key) ? { size: objects.get(key)!.byteLength } : null,
+    );
+    const remove = vi.fn(async (key: string) => {
+      objects.delete(key);
+    });
+    environment.MEDIA = { put, get, head, delete: remove } as unknown as R2Bucket;
+    const registerEntryMedia = vi.fn(async (input: { objectKey: string }) => ({
+      id: "media_1",
+      kind: "image",
+      mimeType: "image/jpeg",
+      url: `/media/${input.objectKey}`,
+      sizeBytes: 12,
+      width: 3,
+      height: 2,
+      durationMs: null,
+      createdAt: "2033-05-18T03:33:20.000Z",
+    }));
+    Object.assign(environment.CORE, { registerEntryMedia });
+
+    const loginResponse = await app.request(
+      "https://ledger.example.test/auth/login",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://ledger.example.test",
+        },
+        body: new URLSearchParams({ password: TEST_PASSWORD }).toString(),
+      },
+      environment,
+    );
+    const cookie = loginResponse.headers.get("set-cookie")!.split(";", 1)[0]!;
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+    const uploadResponse = await app.request(
+      "https://ledger.example.test/api/v1/entry-media?width=3&height=2",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          Origin: "https://ledger.example.test",
+          "Content-Type": "image/jpeg",
+          "Content-Length": String(jpeg.byteLength),
+        },
+        body: jpeg.buffer as ArrayBuffer,
+      },
+      environment,
+    );
+    expect(uploadResponse.status).toBe(201);
+    const media = (await uploadResponse.json()) as { url: string };
+    expect(media.url).toMatch(/^\/media\/entry-media\/[a-f0-9-]{36}\.jpg$/);
+    expect(registerEntryMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "image", width: 3, height: 2, sizeBytes: 12 }),
+    );
+
+    const rangeResponse = await app.request(
+      `https://ledger.example.test${media.url}`,
+      { headers: { Cookie: cookie, Range: "bytes=4-7" } },
+      environment,
+    );
+    expect(rangeResponse.status).toBe(206);
+    expect(rangeResponse.headers.get("content-range")).toBe("bytes 4-7/12");
+    expect(new Uint8Array(await rangeResponse.arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+
+    const html = new TextEncoder().encode("<html>nope</html>");
+    const spoofResponse = await app.request(
+      "https://ledger.example.test/api/v1/entry-media",
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookie,
+          Origin: "https://ledger.example.test",
+          "Content-Type": "image/jpeg",
+          "Content-Length": String(html.byteLength),
+        },
+        body: html.buffer as ArrayBuffer,
+      },
+      environment,
+    );
+    expect(spoofResponse.status).toBe(415);
+    expect(remove).toHaveBeenCalledOnce();
+    expect(registerEntryMedia).toHaveBeenCalledOnce();
+
+    const unauthenticated = await app.request(
+      `https://ledger.example.test${media.url}`,
+      {},
+      environment,
+    );
+    expect(unauthenticated.status).toBe(401);
+  });
+
+  it("accepts one-time MCP upload URLs without a session and never twice", async () => {
+    const environment = createEnvironment();
+    const objects = new Map<string, Uint8Array>();
+    environment.MEDIA = {
+      put: vi.fn(async (key: string, value: ReadableStream) => {
+        const stored = new Uint8Array(await new Response(value).arrayBuffer());
+        objects.set(key, stored);
+        return { key, size: stored.byteLength };
+      }),
+      get: vi.fn(async (key: string) => {
+        const stored = objects.get(key);
+        return stored
+          ? { arrayBuffer: async () => stored.slice(0, 16).buffer }
+          : null;
+      }),
+      delete: vi.fn(async (key: string) => {
+        objects.delete(key);
+      }),
+    } as unknown as R2Bucket;
+    let claimed = false;
+    const claimEntryMediaUpload = vi.fn(
+      async (_token: string, request: { mimeType: string; sizeBytes: number }) => {
+        if (claimed) {
+          throw new Error("ENTRY_MEDIA_UPLOAD_USED: This upload URL has already been used.");
+        }
+        if (request.mimeType !== "video/webm") {
+          throw new Error("ENTRY_MEDIA_UPLOAD_TYPE_MISMATCH: Content-Type must be video/webm.");
+        }
+        claimed = true;
+        return {
+          mediaId: "media_abc_0123abcd",
+          objectKey: "entry-media/0b8f6a2e-5c1d-4f7a-9e3b-2d6c8a1f4e70.webm",
+          kind: "video",
+          mimeType: "video/webm",
+          maxBytes: 1000,
+          width: 640,
+          height: 360,
+          durationMs: 2000,
+        };
+      },
+    );
+    const registerEntryMedia = vi.fn(async (input: { mediaId: string }) => ({
+      id: input.mediaId,
+    }));
+    Object.assign(environment.CORE, { claimEntryMediaUpload, registerEntryMedia });
+    const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]);
+    const put = (contentType: string) =>
+      app.request(
+        "https://ledger.example.test/upload/entry-media/token-value",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": contentType,
+            "Content-Length": String(webm.byteLength),
+          },
+          body: webm.buffer as ArrayBuffer,
+        },
+        environment,
+      );
+
+    const wrongType = await put("video/mp4");
+    expect(wrongType.status).toBe(415);
+
+    const accepted = await put("video/webm");
+    expect(accepted.status).toBe(201);
+    await expect(accepted.json()).resolves.toEqual({
+      ok: true,
+      data: { id: "media_abc_0123abcd" },
+    });
+    expect(registerEntryMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mediaId: "media_abc_0123abcd",
+        uploadedVia: "mcp",
+        sizeBytes: 8,
+        durationMs: 2000,
+      }),
+    );
+
+    const replay = await put("video/webm");
+    expect(replay.status).toBe(409);
+
+    const getWithToken = await app.request(
+      "https://ledger.example.test/upload/entry-media/token-value",
+      {},
+      environment,
+    );
+    expect(getWithToken.status).toBe(401);
+  });
+
   it("clears the hardened session cookie on logout", async () => {
     const response = await app.request(
       "https://ledger.example.test/auth/logout",

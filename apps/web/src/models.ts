@@ -30,6 +30,23 @@ export interface AuditEvent {
   createdAt: string;
 }
 
+export interface EntryMediaItem {
+  id: string;
+  kind: "image" | "video";
+  mimeType: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+}
+
+export interface EntryFollowUp {
+  id: string;
+  body: string;
+  sourceChannel: SourceChannel;
+  createdAt: string;
+}
+
 export interface LedgerEntry {
   id: string;
   type: EntryType;
@@ -51,6 +68,8 @@ export interface LedgerEntry {
   ratingScope: "episode" | "season" | "work" | null;
   mediaKind?: "movie" | "tv";
   versionNo: number;
+  media: EntryMediaItem[];
+  followUps: EntryFollowUp[];
   revisions: EntryRevision[];
   audit: AuditEvent[];
 }
@@ -135,6 +154,14 @@ export interface CaptureDraft {
   seasonId: string;
   seasonLabel: string;
   episodeLabel: string;
+  mediaIds: string[];
+  tags?: string[];
+}
+
+export interface CaptureDraftSeed {
+  type: EntryType;
+  bodyRaw: string;
+  mediaIds: string[];
 }
 
 export interface ToastMessage {

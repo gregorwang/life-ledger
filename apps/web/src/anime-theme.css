@@ -360,7 +360,6 @@ h3 {
 .secondary-button,
 .danger-button,
 .publish-button,
-.filter-button,
 .clear-filter-button {
   min-height: 43px;
   border-radius: 0;
@@ -459,164 +458,6 @@ h3 {
 }
 
 /* Mono-derived layered panorama hero. */
-.timeline-page {
-  width: 100%;
-  max-width: none;
-  padding: 0 0 78px;
-}
-
-.timeline-page > :not(.timeline-hero) {
-  width: min(calc(100% - (var(--page-gutter) * 2)), 1360px);
-  margin-inline: auto;
-}
-
-.timeline-hero {
-  min-height: clamp(600px, 77vh, 820px);
-  grid-template-columns: minmax(0, 1fr);
-  align-items: end;
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background:
-    radial-gradient(circle at 64% 37%, rgb(79 196 255 / 18%), transparent 22%),
-    linear-gradient(100deg, #071228 0 24%, rgb(9 31 61 / 65%) 57%, rgb(0 105 167 / 9%) 100%),
-    #0a1730;
-  box-shadow: none;
-}
-
-.timeline-hero::before {
-  position: absolute;
-  z-index: -1;
-  top: 50%;
-  right: -28vmax;
-  width: 114vmax;
-  height: 114vmax;
-  border: 1px solid rgb(255 255 255 / 38%);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, transparent 0 47%, rgb(7 18 40 / 8%) 48% 55%, transparent 56%),
-    conic-gradient(
-      from 160deg,
-      rgb(21 156 244 / 18%),
-      transparent 28%,
-      rgb(255 79 163 / 12%),
-      transparent 67%,
-      rgb(255 138 0 / 16%)
-    );
-  content: "";
-  opacity: 0.85;
-  transform: translateY(-50%);
-  animation: orbit-breathe 14s ease-in-out infinite alternate;
-}
-
-.timeline-hero::after {
-  z-index: 1;
-  background:
-    linear-gradient(180deg, rgb(4 11 27 / 4%) 0 50%, rgb(5 13 30 / 83%) 100%),
-    linear-gradient(90deg, rgb(4 12 30 / 91%) 0 25%, transparent 68%);
-  background-size: auto;
-  content: "";
-  mask-image: none;
-}
-
-.hero-panorama {
-  position: absolute;
-  z-index: -2;
-  top: 50%;
-  right: -16vmax;
-  width: max(92vw, 1080px);
-  max-width: none;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  object-fit: cover;
-  filter: saturate(1.12) contrast(1.04);
-  transform: translateY(-50%);
-  animation: panorama-arrive 1100ms cubic-bezier(0.2, 0.78, 0.16, 1) both;
-}
-
-.hero-characters {
-  position: absolute;
-  z-index: 2;
-  right: -2%;
-  bottom: -3%;
-  width: min(74vw, 1050px);
-  max-width: none;
-  max-height: 94%;
-  object-fit: contain;
-  object-position: right bottom;
-  filter: drop-shadow(-28px 28px 32px rgb(3 11 27 / 34%));
-  pointer-events: none;
-  animation: characters-arrive 1050ms 140ms cubic-bezier(0.16, 0.88, 0.2, 1) both;
-}
-
-.hero-orbit-copy {
-  position: absolute;
-  z-index: 3;
-  top: 57px;
-  right: clamp(28px, 5vw, 84px);
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  color: #fff;
-}
-
-.hero-orbit-copy span {
-  font-family: "Yu Mincho", "Noto Serif JP", "Songti SC", serif;
-  font-size: clamp(36px, 5vw, 76px);
-  letter-spacing: 0.14em;
-  line-height: 1;
-  writing-mode: vertical-rl;
-}
-
-.hero-orbit-copy small {
-  margin-bottom: 3px;
-  color: #b9e9ff;
-  font-size: 8px;
-  letter-spacing: 0.24em;
-  writing-mode: vertical-rl;
-}
-
-.hero-copy {
-  position: relative;
-  z-index: 4;
-  width: min(760px, 61%);
-  max-width: none;
-  padding: clamp(44px, 7vw, 100px) clamp(28px, 6vw, 92px);
-  color: #fff;
-}
-
-.hero-kicker {
-  color: #9feeff;
-  font-size: 10px;
-  letter-spacing: 0.17em;
-}
-
-.live-dot {
-  background: #1ee6ff;
-  box-shadow: 0 0 0 6px rgb(30 230 255 / 17%);
-}
-
-.hero-copy h1 {
-  max-width: 680px;
-  margin-top: 20px;
-  font-family: "Ledger Display", "Noto Serif SC", Georgia, serif;
-  font-size: clamp(58px, 7.2vw, 105px);
-  font-weight: 600;
-  line-height: 0.84;
-  letter-spacing: -0.055em;
-  text-shadow: 0 4px 30px rgb(0 0 0 / 28%);
-}
-
-.hero-copy h1::first-line {
-  color: #fff;
-}
-
-.hero-copy > p {
-  max-width: 510px;
-  color: #d7efff;
-  font-size: 13px;
-  line-height: 1.85;
-}
 
 .hero-actions {
   margin-top: 31px;
@@ -639,102 +480,7 @@ h3 {
   backdrop-filter: blur(10px);
 }
 
-.hero-safety-note {
-  z-index: 5;
-  right: clamp(22px, 4vw, 64px);
-  bottom: 27px;
-  max-width: 270px;
-  border: 1px solid rgb(157 239 255 / 75%);
-  border-radius: 0;
-  color: #d8faff;
-  background: rgb(6 25 50 / 72%);
-  box-shadow: 6px 6px 0 rgb(21 156 244 / 24%);
-}
-
-.hero-safety-note span {
-  color: #9dd7e8;
-}
-
-.metrics-row {
-  position: relative;
-  z-index: 5;
-  gap: 0;
-  margin-top: -1px;
-  border: 1px solid #111522;
-  background: #111522;
-}
-
-.metric-card {
-  min-height: 104px;
-  padding: 18px 20px;
-  border: 0;
-  border-right: 1px solid #111522;
-  border-radius: 0;
-  background: #fff;
-  box-shadow: none;
-}
-
-.metric-card:last-child {
-  border-right: 0;
-}
-
-.metric-card:nth-child(2) {
-  background: #e2faff;
-}
-
-.metric-card:nth-child(3) {
-  background: #f2e8ff;
-}
-
-.metric-card:nth-child(4) {
-  background: #fff0dc;
-}
-
-.metric-icon {
-  width: 42px;
-  height: 42px;
-  border: 1px solid #111522;
-  border-radius: 50%;
-  color: #111522 !important;
-  background: transparent !important;
-}
-
-.metric-card strong {
-  font-family: "Ledger Display", Georgia, serif;
-  font-size: 34px;
-}
-
-.metric-card small {
-  color: #6b788b;
-}
-
-.recent-action-card {
-  margin-top: 13px;
-  border: 1px solid #111522;
-  border-radius: 0;
-  background:
-    linear-gradient(90deg, rgb(21 156 244 / 9%), transparent 46%),
-    #fff;
-  box-shadow: 4px 4px 0 #15b8ce;
-}
-
-.recent-action-icon {
-  border: 1px solid #111522;
-  border-radius: 50%;
-  color: #111522;
-  background: var(--amber);
-}
-
-.recent-action-card > button {
-  border-bottom: 1px solid #111522;
-  border-radius: 0;
-  color: #0069a8;
-}
-
 /* Chiramune date rhythm + Mono paper story stack. */
-.timeline-section {
-  margin-top: 74px;
-}
 
 .section-heading-row h2,
 .settings-section h2,
@@ -746,75 +492,10 @@ h3 {
   font-weight: 650;
 }
 
-.search-trigger,
-.filter-button,
-.select-controls label,
-.filter-panel {
+.select-controls label {
   border-color: #8da8bc;
   border-radius: 0;
   background: rgb(255 255 255 / 85%);
-}
-
-.filter-chip {
-  border-radius: 2px;
-}
-
-.filter-chip.is-active {
-  color: #fff;
-  border-color: #111522;
-  background: #111522;
-}
-
-.timeline-groups {
-  margin-top: 31px;
-}
-
-.timeline-group {
-  grid-template-columns: 148px minmax(0, 1fr);
-  gap: clamp(24px, 4vw, 62px);
-  padding: 31px 0 58px;
-  border-top: 1px solid #111522;
-}
-
-.date-marker {
-  position: sticky;
-  top: 35px;
-  display: grid;
-  height: max-content;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-}
-
-.date-marker strong {
-  grid-row: 1 / span 2;
-  color: #607387;
-  font-family: "Ledger Sans", sans-serif;
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  writing-mode: vertical-rl;
-}
-
-.date-marker span {
-  color: var(--amber);
-  font-family: "Ledger Display", Georgia, serif;
-  font-size: clamp(29px, 3.2vw, 46px);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
-  word-break: break-all;
-}
-
-.date-marker i {
-  grid-column: 2;
-  width: 70px;
-  height: 5px;
-  margin-top: 7px;
-  background: linear-gradient(90deg, #111522 0 44%, var(--pink) 44%);
-}
-
-.entry-list {
-  gap: 22px;
 }
 
 .entry-card {
@@ -1904,7 +1585,6 @@ h3 {
   }
 
   .secondary-button:hover,
-  .filter-button:hover,
   .clear-filter-button:hover {
     border-color: #111522;
     background: #e5f6ff;
@@ -1980,14 +1660,6 @@ h3 {
 }
 
 @media (max-width: 1220px) {
-  .hero-copy {
-    width: min(710px, 68%);
-  }
-
-  .hero-characters {
-    right: -10%;
-    width: min(82vw, 950px);
-  }
 
   .anime-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2019,32 +1691,6 @@ h3 {
 
   .mobile-brand .brand-mark {
     border-radius: 50%;
-  }
-
-  .timeline-hero {
-    min-height: 690px;
-    grid-template-columns: 1fr;
-  }
-
-  .hero-panorama {
-    right: -47%;
-    width: max(970px, 130vw);
-  }
-
-  .hero-characters {
-    right: -14%;
-    width: max(660px, 91vw);
-    max-height: 83%;
-  }
-
-  .hero-copy {
-    width: min(720px, 74%);
-    padding: 60px 38px 102px;
-  }
-
-  .hero-orbit-copy {
-    top: 38px;
-    right: 28px;
   }
 
   .anime-feature {
@@ -2083,114 +1729,8 @@ h3 {
     padding-left: 16px;
   }
 
-  .timeline-page {
-    padding-top: 0;
-  }
-
-  .timeline-hero {
-    min-height: 720px;
-  }
-
-  .timeline-hero::after {
-    background:
-      linear-gradient(180deg, rgb(4 11 27 / 21%) 0 36%, rgb(5 13 30 / 90%) 79%),
-      linear-gradient(90deg, rgb(4 12 30 / 64%), transparent);
-  }
-
-  .hero-panorama {
-    top: 38%;
-    right: -104%;
-    width: 1170px;
-  }
-
-  .hero-characters {
-    right: -58%;
-    bottom: 6%;
-    width: 900px;
-    max-width: none;
-    max-height: 76%;
-  }
-
-  .hero-copy {
-    width: 100%;
-    padding: 55px 22px 122px;
-  }
-
-  .hero-copy h1 {
-    max-width: 480px;
-    font-size: clamp(42px, 11vw, 58px);
-    line-height: 0.88;
-  }
-
-  .hero-copy > p {
-    max-width: 370px;
-    font-size: 12px;
-  }
-
-  .hero-orbit-copy {
-    display: none;
-  }
-
-  .hero-safety-note {
-    right: 19px;
-    bottom: 19px;
-    left: 19px;
-    max-width: 330px;
-  }
-
   .anime-queue-lane {
     padding: 18px;
-  }
-
-  .metrics-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .metric-card {
-    min-height: 96px;
-    border-bottom: 1px solid #111522;
-  }
-
-  .metric-card:nth-child(2) {
-    border-right: 0;
-  }
-
-  .metric-card:nth-child(3),
-  .metric-card:nth-child(4) {
-    border-bottom: 0;
-  }
-
-  .recent-action-card {
-    margin-top: 10px;
-  }
-
-  .timeline-section {
-    margin-top: 60px;
-  }
-
-  .timeline-group {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-
-  .date-marker {
-    position: static;
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .date-marker strong {
-    grid-row: auto;
-    writing-mode: horizontal-tb;
-  }
-
-  .date-marker span {
-    font-size: 32px;
-    word-break: normal;
-  }
-
-  .date-marker i {
-    grid-column: 1 / -1;
-    width: 100%;
   }
 
   .anime-feature {
@@ -2276,39 +1816,6 @@ h3 {
     padding-bottom: 58px;
   }
 
-  .timeline-page > :not(.timeline-hero) {
-    width: calc(100% - 24px);
-  }
-
-  .timeline-hero {
-    min-height: 720px;
-  }
-
-  .hero-panorama {
-    right: -161%;
-  }
-
-  .hero-characters {
-    right: -205px;
-    bottom: 13%;
-    width: 650px;
-    opacity: 0.68;
-    filter: drop-shadow(-18px 22px 28px rgb(3 11 27 / 30%)) brightness(0.87);
-  }
-
-  .hero-copy {
-    padding: 47px 17px 126px;
-  }
-
-  .hero-copy h1 {
-    font-size: clamp(42px, 11vw, 52px);
-  }
-
-  .hero-copy h1,
-  .hero-copy > p {
-    text-shadow: 0 3px 12px rgb(0 5 19 / 80%);
-  }
-
   .hero-actions {
     display: grid;
     width: min(100%, 290px);
@@ -2317,41 +1824,6 @@ h3 {
   .hero-actions .primary-button,
   .hero-actions .secondary-button {
     width: 100%;
-  }
-
-  .metric-card {
-    grid-template-columns: 1fr;
-    gap: 7px;
-    padding: 13px;
-  }
-
-  .metric-icon {
-    width: 32px;
-    height: 32px;
-  }
-
-  .metric-card > div:last-child {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
-  .metric-card strong {
-    font-size: 27px;
-  }
-
-  .metric-card small {
-    width: 100%;
-  }
-
-  .recent-action-card {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .recent-action-card > button {
-    grid-column: 2;
-    justify-self: start;
-    padding-inline: 0;
   }
 
   .entry-card-content {
@@ -2458,9 +1930,6 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-panorama,
-  .hero-characters,
-  .timeline-hero::before,
   .anime-feature::before {
     animation: none;
   }
@@ -5133,5 +4602,13 @@ body::before {
 
   .game-card-title-row h3 {
     font-size: clamp(27px, 9vw, 39px);
+  }
+}
+
+/* The off-canvas sidebar keeps its drop shadow while hidden, which bled a
+   dark band over the left edge of every page on phones. */
+@media (max-width: 900px) {
+  .app-shell:not(.mobile-nav-open) .sidebar {
+    box-shadow: none;
   }
 }

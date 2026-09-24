@@ -6,7 +6,14 @@ import {
 } from "cloudflare:workers";
 
 import {
+  ENTRY_MEDIA_LIMITS,
+  addEntryFollowUpInputSchema,
+  attachEntryMediaInputSchema,
   captureEntryInputSchema,
+  createEntryMediaUploadInputSchema,
+  entryMediaKindFor,
+  entryMediaMaxBytes,
+  matchesEntryMediaSignature,
   confirmActionInputSchema,
   createGameLibraryItemInputSchema,
   createMediaSeasonInputSchema,
@@ -18,6 +25,8 @@ import {
   listMediaWorksInputSchema,
   listTagsInputSchema,
   logMediaInputSchema,
+  registerEntryMediaInputSchema,
+  uploadEntryMediaInputSchema,
   normalizeMediaTitle,
   onThisDayInputSchema,
   publicAnimeResponseSchema,
@@ -29,6 +38,11 @@ import {
   updateGameLibraryItemInputSchema,
   updateMediaSeasonInputSchema,
   updateMediaWorkInputSchema,
+  type AddEntryFollowUpInput,
+  type CreateEntryMediaUploadInput,
+  type EntryMediaUploadClaim,
+  type EntryMediaUploadTicket,
+  type UploadEntryMediaInput,
   type AnimeWorkDetail,
   type AnimeWorkSummary,
   type AuditEvent,
@@ -38,6 +52,8 @@ import {
   type CreateMediaSeasonInput,
   type CreateMediaWorkInput,
   type EntryDetail,
+  type EntryFollowUp,
+  type EntryMedia,
   type EntryRevision,
   type EntryStatus,
   type EntrySummary,
@@ -67,6 +83,7 @@ import {
   type MediaWorkDetail,
   type MediaWorkSummary,
   type MutationResult,
+  type RegisterEntryMediaInput,
   type PendingAction,
   type PublicAnimeItem,
   type PublicAnimeResponse,
@@ -90,6 +107,13 @@ import {
   sha256HexBytes,
   type ExportTable,
 } from "./export-utils";
+import {
+  createEntryMediaObjectKey,
+  createUploadToken,
+  decodeEntryMediaBase64,
+  isWellFormedUploadToken,
+  uploadBaseOrigin,
+} from "./entry-media";
 import { mediaWatchStatusFromLegacyStatus } from "./media-import";
 import {
   MEDIA_WORK_AGGREGATE_SELECT,
@@ -113,6 +137,8 @@ interface Env extends MediaUploadEnvironment {
   BACKUPS: R2Bucket;
   MEDIA: R2Bucket;
   MEDIA_PUBLIC_BASE_URL: string;
+  /** Origin of the web worker that accepts one-time media uploads. */
+  WEB_ORIGIN?: string;
   EXPORT_WORKFLOW: Workflow<ExportWorkflowParams>;
 }
 
@@ -141,6 +167,40 @@ interface EntryRow {
   season_label: string | null;
   episode_label: string | null;
   score_100: number | null;
+}
+
+interface EntryMediaRow {
+  id: string;
+  entry_id: string | null;
+  kind: EntryMedia["kind"];
+  object_key: string;
+  mime_type: EntryMedia["mimeType"];
+  size_bytes: number;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+interface EntryMediaUploadTicketRow {
+  media_id: string;
+  object_key: string;
+  kind: EntryMedia["kind"];
+  mime_type: EntryMedia["mimeType"];
+  max_bytes: number;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  expires_at: string;
+  claimed_at: string | null;
+}
+
+interface EntryFollowUpRow {
+  id: string;
+  entry_id: string;
+  body_raw: string;
+  source_channel: SourceChannel;
+  created_at: string;
 }
 
 interface RevisionRow {
@@ -463,8 +523,47 @@ function toSummary(row: EntryRow): EntrySummary {
     episodeLabel: row.episode_label,
     ratingScope: row.rating_scope,
     versionNo: row.version_no,
+    media: [],
+    followUps: [],
   };
 }
+
+/**
+ * Entries captured before media attachments existed were hashed without a
+ * mediaIds field; omit it when empty so retried source messages still match.
+ */
+function idempotencyFingerprint(input: { mediaIds: string[] }): string {
+  const { mediaIds, ...rest } = input;
+  return JSON.stringify(mediaIds.length > 0 ? input : rest);
+}
+
+function toEntryMedia(row: EntryMediaRow): EntryMedia {
+  return {
+    id: row.id,
+    kind: row.kind,
+    mimeType: row.mime_type,
+    url: `/media/${row.object_key}`,
+    sizeBytes: row.size_bytes,
+    width: row.width,
+    height: row.height,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at,
+  };
+}
+
+function toEntryFollowUp(row: EntryFollowUpRow): EntryFollowUp {
+  return {
+    id: row.id,
+    body: row.body_raw,
+    sourceChannel: row.source_channel,
+    createdAt: row.created_at,
+  };
+}
+
+const ENTRY_MEDIA_COLUMNS = `
+  id, entry_id, kind, object_key, mime_type, size_bytes,
+  width, height, duration_ms, created_at
+`;
 
 function toExportRecord(row: ExportRow): ExportRecord {
   return {
@@ -604,6 +703,8 @@ const FULL_EXPORT_TABLES = [
   "import_batches",
   "media_assets",
   "media_upload_requests",
+  "entry_media",
+  "entry_follow_ups",
 ] as const;
 
 const STATS_ROW_LIMIT = 20_000;
@@ -799,6 +900,35 @@ async function collectIncrementalExport(
         `
           SELECT *
           FROM media_upload_requests
+          WHERE user_id = ? AND created_at > ? AND created_at <= ?
+          ORDER BY created_at, id
+        `,
+        [USER_ID, start, cutoff],
+      ),
+    },
+    {
+      name: "entry_media",
+      rows: await readPagedRows(
+        database,
+        `
+          SELECT *
+          FROM entry_media
+          WHERE
+            user_id = ? AND
+            coalesce(attached_at, created_at) > ? AND
+            coalesce(attached_at, created_at) <= ?
+          ORDER BY created_at, id
+        `,
+        [USER_ID, start, cutoff],
+      ),
+    },
+    {
+      name: "entry_follow_ups",
+      rows: await readPagedRows(
+        database,
+        `
+          SELECT *
+          FROM entry_follow_ups
           WHERE user_id = ? AND created_at > ? AND created_at <= ?
           ORDER BY created_at, id
         `,
@@ -1545,7 +1675,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       .bind(...values)
       .all<EntryRow>();
 
-    return result.results.map(toSummary);
+    return this.#withEntryExtras(result.results.map(toSummary));
   }
 
   async getEntry(id: string): Promise<EntryDetail | null> {
@@ -1608,8 +1738,9 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       }),
     );
 
+    const [hydrated] = await this.#withEntryExtras([toSummary(row)]);
     return {
-      ...toSummary(row),
+      ...hydrated!,
       sourceMessageId: row.source_message_id,
       sourceConversationId: row.source_conversation_id,
       temporalUncertain: row.temporal_uncertain === 1,
@@ -1627,7 +1758,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         ? "approximate"
         : parsed.datePrecision;
     const actor = actorForSource(parsed.source.channel);
-    const requestHash = await sha256(JSON.stringify(parsed));
+    const requestHash = await sha256(idempotencyFingerprint(parsed));
     const existing = await this.#findIdempotent(
       parsed.source.channel,
       parsed.source.messageId,
@@ -1636,6 +1767,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       return this.#resolveIdempotent(existing, requestHash);
     }
 
+    await this.#assertAttachableMedia(parsed.mediaIds);
     const entryId = createId("ent");
     const requestId = createId("req");
     const createdAt = nowIso();
@@ -1698,6 +1830,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           "Generic entry captured; visibility forced to private.",
           createdAt,
         ),
+        ...this.#attachMediaStatements(entryId, parsed.mediaIds, createdAt),
       ]);
     } catch (error: unknown) {
       const concurrent = await this.#findIdempotent(
@@ -1717,7 +1850,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
     const parsed = logMediaInputSchema.parse(input);
     const occurredAt = utcIso(parsed.occurredAt);
     const actor = actorForSource(parsed.source.channel);
-    const requestHash = await sha256(JSON.stringify(parsed));
+    const requestHash = await sha256(idempotencyFingerprint(parsed));
     const existing = await this.#findIdempotent(
       parsed.source.channel,
       parsed.source.messageId,
@@ -1726,6 +1859,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       return this.#resolveIdempotent(existing, requestHash);
     }
 
+    await this.#assertAttachableMedia(parsed.mediaIds);
     const createdAt = nowIso();
     const requestId = createId("req");
     const entryId = createId("ent");
@@ -1963,6 +2097,7 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         "Media log captured; visibility forced to private.",
         createdAt,
       ),
+      ...this.#attachMediaStatements(entryId, parsed.mediaIds, createdAt),
     );
     try {
       await this.env.DB.batch(writeStatements);
@@ -2194,6 +2329,11 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
       );
     }
     const timestamp = nowIso();
+    const mediaKeys = await this.env.DB.prepare(`
+      SELECT object_key FROM entry_media WHERE user_id = ? AND entry_id = ?
+    `)
+      .bind(USER_ID, id)
+      .all<{ object_key: string }>();
     const purgeResults = await this.env.DB.batch([
       this.env.DB.prepare(`
         DELETE FROM pending_actions
@@ -2227,7 +2367,446 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         409,
       );
     }
+    const objectKeys = mediaKeys.results.map((row) => row.object_key);
+    if (objectKeys.length > 0) {
+      await this.env.MEDIA.delete(objectKeys);
+    }
     return { id, purged: true };
+  }
+
+  async registerEntryMedia(input: RegisterEntryMediaInput): Promise<EntryMedia> {
+    const parsed = registerEntryMediaInputSchema.parse(input);
+    const id = parsed.mediaId ?? createId("media");
+    const createdAt = nowIso();
+    const actor =
+      parsed.uploadedVia === "mcp"
+        ? { actorType: "agent", actorId: "mcp_client" }
+        : { actorType: "user", actorId: ACTOR_USER };
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        INSERT INTO entry_media (
+          id, user_id, entry_id, position, kind, object_key, mime_type,
+          size_bytes, width, height, duration_ms, created_at, attached_at
+        ) VALUES (?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      `).bind(
+        id,
+        USER_ID,
+        parsed.kind,
+        parsed.objectKey,
+        parsed.mimeType,
+        parsed.sizeBytes,
+        parsed.width,
+        parsed.height,
+        parsed.durationMs,
+        createdAt,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        actor.actorType,
+        actor.actorId,
+        "entry_media.uploaded",
+        id,
+        `Entry ${parsed.kind} stored in R2 via ${parsed.uploadedVia} and awaiting attachment.`,
+        createdAt,
+        "entry_media",
+      ),
+    ]);
+    const row = await this.env.DB.prepare(`
+      SELECT ${ENTRY_MEDIA_COLUMNS} FROM entry_media WHERE id = ?
+    `)
+      .bind(id)
+      .first<EntryMediaRow>();
+    if (!row) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_WRITE_FAILED",
+        "Entry media metadata could not be persisted.",
+        500,
+      );
+    }
+    return toEntryMedia(row);
+  }
+
+  async uploadEntryMedia(input: UploadEntryMediaInput): Promise<EntryMedia> {
+    const parsed = uploadEntryMediaInputSchema.parse(input);
+    const maxBytes = Math.min(
+      entryMediaMaxBytes(parsed.mimeType),
+      ENTRY_MEDIA_LIMITS.maxInlineBytes,
+    );
+    const bytes = decodeEntryMediaBase64(parsed.base64Data, maxBytes);
+    if (bytes === "too_large") {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_TOO_LARGE",
+        `Base64 uploads are limited to ${maxBytes} bytes; use create_entry_media_upload for larger files.`,
+        413,
+      );
+    }
+    if (bytes === "invalid") {
+      throw new LedgerDomainError(
+        "INVALID_BASE64",
+        "base64Data must be standard Base64 without a data: prefix or whitespace.",
+        422,
+      );
+    }
+    if (!matchesEntryMediaSignature(parsed.mimeType, bytes.subarray(0, 16))) {
+      throw new LedgerDomainError(
+        "MEDIA_CONTENT_MISMATCH",
+        "The file content does not match the declared mimeType.",
+        415,
+      );
+    }
+    const kind = entryMediaKindFor(parsed.mimeType);
+    const objectKey = createEntryMediaObjectKey(parsed.mimeType);
+    await this.env.MEDIA.put(objectKey, bytes, {
+      httpMetadata: {
+        contentType: parsed.mimeType,
+        cacheControl: "private, max-age=31536000, immutable",
+        contentDisposition: "inline",
+      },
+      customMetadata: { kind, source: "mcp" },
+    });
+    try {
+      return await this.registerEntryMedia({
+        uploadedVia: "mcp",
+        objectKey,
+        kind,
+        mimeType: parsed.mimeType,
+        sizeBytes: bytes.byteLength,
+        width: parsed.width,
+        height: parsed.height,
+        durationMs: kind === "video" ? parsed.durationMs : null,
+      });
+    } catch (error: unknown) {
+      await this.env.MEDIA.delete(objectKey);
+      throw error;
+    }
+  }
+
+  async createEntryMediaUpload(
+    input: CreateEntryMediaUploadInput,
+  ): Promise<EntryMediaUploadTicket> {
+    const parsed = createEntryMediaUploadInputSchema.parse(input);
+    const origin = uploadBaseOrigin(
+      this.env.WEB_ORIGIN,
+      this.env.MEDIA_PUBLIC_BASE_URL,
+    );
+    const mediaId = createId("media");
+    const token = createUploadToken();
+    const createdAt = nowIso();
+    const expiresAt = new Date(
+      Date.now() + ENTRY_MEDIA_LIMITS.uploadTicketMinutes * 60_000,
+    ).toISOString();
+    const maxBytes = entryMediaMaxBytes(parsed.mimeType);
+    const kind = entryMediaKindFor(parsed.mimeType);
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        INSERT INTO entry_media_upload_tickets (
+          media_id, user_id, token_hash, object_key, kind, mime_type,
+          max_bytes, width, height, duration_ms, created_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        mediaId,
+        USER_ID,
+        await sha256(token),
+        createEntryMediaObjectKey(parsed.mimeType),
+        kind,
+        parsed.mimeType,
+        maxBytes,
+        parsed.width,
+        parsed.height,
+        kind === "video" ? parsed.durationMs : null,
+        createdAt,
+        expiresAt,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        "agent",
+        "mcp_client",
+        "entry_media.upload_ticket_created",
+        mediaId,
+        `One-time ${kind} upload URL issued; expires ${expiresAt}.`,
+        createdAt,
+        "entry_media",
+      ),
+    ]);
+    const uploadUrl = `${origin}/upload/entry-media/${token}`;
+    return {
+      mediaId,
+      uploadUrl,
+      method: "PUT",
+      headers: { "Content-Type": parsed.mimeType },
+      maxBytes,
+      expiresAt,
+      curlExample: `curl -sS -X PUT -H 'Content-Type: ${parsed.mimeType}' --data-binary @<file> '${uploadUrl}'`,
+    };
+  }
+
+  async claimEntryMediaUpload(
+    token: string,
+    request: { mimeType: string; sizeBytes: number },
+  ): Promise<EntryMediaUploadClaim> {
+    const notFound = new LedgerDomainError(
+      "ENTRY_MEDIA_UPLOAD_NOT_FOUND",
+      "Upload URL is invalid.",
+      404,
+    );
+    if (!isWellFormedUploadToken(token)) {
+      throw notFound;
+    }
+    const tokenHash = await sha256(token);
+    const row = await this.env.DB.prepare(`
+      SELECT
+        media_id, object_key, kind, mime_type, max_bytes, width, height,
+        duration_ms, expires_at, claimed_at
+      FROM entry_media_upload_tickets
+      WHERE user_id = ? AND token_hash = ?
+    `)
+      .bind(USER_ID, tokenHash)
+      .first<EntryMediaUploadTicketRow>();
+    if (!row) {
+      throw notFound;
+    }
+    if (row.claimed_at !== null) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_USED",
+        "This upload URL has already been used; request a new one.",
+        409,
+      );
+    }
+    if (row.expires_at <= nowIso()) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_EXPIRED",
+        "This upload URL has expired; request a new one.",
+        410,
+      );
+    }
+    if (request.mimeType !== row.mime_type) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_TYPE_MISMATCH",
+        `Content-Type must be ${row.mime_type}.`,
+        415,
+      );
+    }
+    if (request.sizeBytes <= 0 || request.sizeBytes > row.max_bytes) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_TOO_LARGE",
+        `Upload must be between 1 and ${row.max_bytes} bytes.`,
+        413,
+      );
+    }
+    const claimed = await this.env.DB.prepare(`
+      UPDATE entry_media_upload_tickets
+      SET claimed_at = ?
+      WHERE user_id = ? AND token_hash = ? AND claimed_at IS NULL
+    `)
+      .bind(nowIso(), USER_ID, tokenHash)
+      .run();
+    if ((claimed.meta.changes ?? 0) === 0) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UPLOAD_USED",
+        "This upload URL has already been used; request a new one.",
+        409,
+      );
+    }
+    return {
+      mediaId: row.media_id,
+      objectKey: row.object_key,
+      kind: row.kind,
+      mimeType: row.mime_type,
+      maxBytes: row.max_bytes,
+      width: row.width,
+      height: row.height,
+      durationMs: row.duration_ms,
+    };
+  }
+
+  async attachEntryMedia(
+    entryId: string,
+    mediaIds: string[],
+  ): Promise<EntryDetail> {
+    const parsed = attachEntryMediaInputSchema.parse({ mediaIds });
+    const current = await this.#requireEntry(entryId);
+    if (current.status === "deleted") {
+      throw new LedgerDomainError(
+        "ENTRY_DELETED",
+        "Restore the entry before adding photos or videos.",
+        409,
+      );
+    }
+    if (
+      current.media.length + parsed.mediaIds.length >
+      ENTRY_MEDIA_LIMITS.maxPerEntry
+    ) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_LIMIT_CONFLICT",
+        `An entry holds at most ${ENTRY_MEDIA_LIMITS.maxPerEntry} photos or videos.`,
+        409,
+      );
+    }
+    await this.#assertAttachableMedia(parsed.mediaIds);
+    const attachedAt = nowIso();
+    await this.env.DB.batch([
+      ...this.#attachMediaStatements(
+        entryId,
+        parsed.mediaIds,
+        attachedAt,
+        current.media.length,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        "agent",
+        "mcp_client",
+        "entry.media_attached",
+        entryId,
+        `${parsed.mediaIds.length} photo/video item(s) attached.`,
+        attachedAt,
+      ),
+    ]);
+    return this.#requireEntry(entryId);
+  }
+
+  async deleteEntryMedia(entryId: string, mediaId: string): Promise<EntryDetail> {
+    await this.#requireEntry(entryId);
+    const row = await this.env.DB.prepare(`
+      SELECT object_key FROM entry_media
+      WHERE user_id = ? AND entry_id = ? AND id = ?
+    `)
+      .bind(USER_ID, entryId, mediaId)
+      .first<{ object_key: string }>();
+    if (!row) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_NOT_FOUND",
+        "This photo or video is not attached to the entry.",
+        404,
+      );
+    }
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        DELETE FROM entry_media WHERE user_id = ? AND entry_id = ? AND id = ?
+      `).bind(USER_ID, entryId, mediaId),
+      this.#auditStatement(
+        createId("req"),
+        "user",
+        ACTOR_USER,
+        "entry.media_removed",
+        entryId,
+        "A photo or video was removed from the entry and deleted from R2.",
+        nowIso(),
+      ),
+    ]);
+    await this.env.MEDIA.delete(row.object_key);
+    return this.#requireEntry(entryId);
+  }
+
+  async discardEntryMedia(id: string): Promise<{ id: string; discarded: true }> {
+    const row = await this.env.DB.prepare(`
+      SELECT ${ENTRY_MEDIA_COLUMNS}
+      FROM entry_media
+      WHERE user_id = ? AND id = ?
+    `)
+      .bind(USER_ID, id)
+      .first<EntryMediaRow>();
+    if (!row) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_NOT_FOUND",
+        "Entry media not found.",
+        404,
+      );
+    }
+    if (row.entry_id !== null) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_ATTACHED",
+        "Media already attached to an entry cannot be discarded separately.",
+        409,
+      );
+    }
+    await this.env.DB.prepare(`
+      DELETE FROM entry_media
+      WHERE user_id = ? AND id = ? AND entry_id IS NULL
+    `)
+      .bind(USER_ID, id)
+      .run();
+    await this.env.MEDIA.delete(row.object_key);
+    return { id, discarded: true };
+  }
+
+  async addEntryFollowUp(
+    entryId: string,
+    input: AddEntryFollowUpInput,
+  ): Promise<EntryDetail> {
+    const parsed = addEntryFollowUpInputSchema.parse(input);
+    const current = await this.#requireEntry(entryId);
+    if (current.status === "deleted") {
+      throw new LedgerDomainError(
+        "ENTRY_DELETED",
+        "Restore the entry before adding a follow-up.",
+        409,
+      );
+    }
+    const actor = actorForSource(parsed.sourceChannel);
+    const followUpId = createId("followup");
+    const createdAt = nowIso();
+    await this.env.DB.batch([
+      this.env.DB.prepare(`
+        INSERT INTO entry_follow_ups (
+          id, user_id, entry_id, body_raw, source_channel, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        followUpId,
+        USER_ID,
+        entryId,
+        parsed.body,
+        parsed.sourceChannel,
+        createdAt,
+      ),
+      this.#auditStatement(
+        createId("req"),
+        actor.actorType,
+        actor.actorId,
+        "entry.follow_up_added",
+        entryId,
+        "Follow-up note appended to the entry.",
+        createdAt,
+      ),
+    ]);
+    return this.#requireEntry(entryId);
+  }
+
+  async deleteEntryFollowUp(
+    entryId: string,
+    followUpId: string,
+  ): Promise<EntryDetail> {
+    await this.#requireEntry(entryId);
+    const timestamp = nowIso();
+    const results = await this.env.DB.batch([
+      this.env.DB.prepare(`
+        DELETE FROM entry_follow_ups
+        WHERE user_id = ? AND entry_id = ? AND id = ?
+      `).bind(USER_ID, entryId, followUpId),
+      this.env.DB.prepare(`
+        INSERT INTO audit_events (
+          id, request_id, user_id, actor_type, actor_id,
+          action, target_type, target_id, detail, metadata_json, created_at
+        )
+        SELECT ?, ?, ?, 'user', ?, 'entry.follow_up_deleted', 'entry', ?, ?, '{}', ?
+        WHERE changes() = 1
+      `).bind(
+        createId("audit"),
+        createId("req"),
+        USER_ID,
+        ACTOR_USER,
+        entryId,
+        "Follow-up note removed from the entry.",
+        timestamp,
+      ),
+    ]);
+    if ((results[0]?.meta.changes ?? 0) === 0) {
+      throw new LedgerDomainError(
+        "FOLLOW_UP_NOT_FOUND",
+        "Follow-up not found.",
+        404,
+      );
+    }
+    return this.#requireEntry(entryId);
   }
 
   async preparePublish(id: string): Promise<PendingAction> {
@@ -3800,6 +4379,84 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           )
       `).bind(timestamp, USER_ID, timestamp),
     ]);
+  }
+
+  async #withEntryExtras<T extends EntrySummary>(entries: T[]): Promise<T[]> {
+    if (entries.length === 0) {
+      return entries;
+    }
+    const ids = JSON.stringify(entries.map((entry) => entry.id));
+    const [mediaResult, followUpResult] = await this.env.DB.batch<
+      EntryMediaRow | EntryFollowUpRow
+    >([
+      this.env.DB.prepare(`
+        SELECT ${ENTRY_MEDIA_COLUMNS}
+        FROM entry_media
+        WHERE user_id = ? AND entry_id IN (SELECT value FROM json_each(?))
+        ORDER BY entry_id, position, created_at
+      `).bind(USER_ID, ids),
+      this.env.DB.prepare(`
+        SELECT id, entry_id, body_raw, source_channel, created_at
+        FROM entry_follow_ups
+        WHERE user_id = ? AND entry_id IN (SELECT value FROM json_each(?))
+        ORDER BY entry_id, created_at, id
+      `).bind(USER_ID, ids),
+    ]);
+    const mediaByEntry = new Map<string, EntryMedia[]>();
+    for (const row of (mediaResult?.results ?? []) as EntryMediaRow[]) {
+      const list = mediaByEntry.get(row.entry_id!) ?? [];
+      list.push(toEntryMedia(row));
+      mediaByEntry.set(row.entry_id!, list);
+    }
+    const followUpsByEntry = new Map<string, EntryFollowUp[]>();
+    for (const row of (followUpResult?.results ?? []) as EntryFollowUpRow[]) {
+      const list = followUpsByEntry.get(row.entry_id) ?? [];
+      list.push(toEntryFollowUp(row));
+      followUpsByEntry.set(row.entry_id, list);
+    }
+    return entries.map((entry) => ({
+      ...entry,
+      media: mediaByEntry.get(entry.id) ?? [],
+      followUps: followUpsByEntry.get(entry.id) ?? [],
+    }));
+  }
+
+  async #assertAttachableMedia(mediaIds: string[]): Promise<void> {
+    if (mediaIds.length === 0) {
+      return;
+    }
+    const row = await this.env.DB.prepare(`
+      SELECT count(*) AS count
+      FROM entry_media
+      WHERE
+        user_id = ? AND
+        entry_id IS NULL AND
+        id IN (SELECT value FROM json_each(?))
+    `)
+      .bind(USER_ID, JSON.stringify(mediaIds))
+      .first<{ count: number }>();
+    if ((row?.count ?? 0) !== mediaIds.length) {
+      throw new LedgerDomainError(
+        "ENTRY_MEDIA_UNAVAILABLE",
+        "Some media are missing or already attached to another entry.",
+        409,
+      );
+    }
+  }
+
+  #attachMediaStatements(
+    entryId: string,
+    mediaIds: string[],
+    attachedAt: string,
+    startPosition = 0,
+  ): D1PreparedStatement[] {
+    return mediaIds.map((mediaId, index) =>
+      this.env.DB.prepare(`
+        UPDATE entry_media
+        SET entry_id = ?, position = ?, attached_at = ?
+        WHERE user_id = ? AND id = ? AND entry_id IS NULL
+      `).bind(entryId, startPosition + index, attachedAt, USER_ID, mediaId),
+    );
   }
 
   async #requireEntry(id: string): Promise<EntryDetail> {

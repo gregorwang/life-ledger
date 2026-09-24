@@ -31,7 +31,7 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 
 ## 工具面
 
-共 37 个工具，`tools/list` 的标题和说明均为中文：
+共 42 个工具，`tools/list` 的标题和说明均为中文：
 
 - 服务：`health`
 - 记录：`get_entry`、`search_entries`、`get_recent_entries`、
@@ -44,6 +44,9 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
   `update_game_library_item`、`delete_game_library_item`、
   `restore_game_library_item`
 - 公开：`prepare_publish`、`confirm_action`、`unpublish_entry`
+- 动态照片/视频：`upload_entry_media`、`create_entry_media_upload`、
+  `attach_entry_media`、`remove_entry_media`
+- 补充：`add_entry_follow_up`、`delete_entry_follow_up`
 - 导入：`import_dry_run`、`import_commit`
 - 导出：`export_create`、`export_list`、`export_verify`
 - 设置：`settings_get`、`settings_update`
@@ -77,6 +80,35 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 - 游戏库软删除与恢复：`confirm=true`，并提供当前 `versionNo`
 - 公开记录：必须先 `prepare_publish`，再提交短时确认码到
   `confirm_action`
+- 移除动态里的照片/视频：`confirmRemove=true`（文件会从存储中删除）
+- 删除补充：`confirmDelete=true`
+
+## 给动态附照片和视频
+
+网页「今日与时间线」里的每条动态最多 9 个照片/视频。Agent 先上传拿到
+`mediaId`，再把它放进 `capture_entry` / `log_media` 的 `mediaIds`：
+
+1. **小照片（解码后 ≤ 10 MB）**：`upload_entry_media`，传
+   `fileName`、`mimeType`、不带 `data:` 前缀的 `base64Data`，可选
+   `width`/`height`。直接返回 `{ id, url, ... }`，`id` 就是 `mediaId`。
+2. **视频或大文件（视频 ≤ 95 MB，照片 ≤ 20 MB）**：`create_entry_media_upload`
+   只传 `mimeType`（可选 `sizeBytes`、`width`、`height`、`durationMs`），
+   返回 `mediaId`、30 分钟内有效且只能用一次的 `uploadUrl` 和 `curlExample`。
+   用 PUT 上传原始字节，文件内容不经过对话上下文：
+
+   ```bash
+   curl -sS -X PUT -H 'Content-Type: video/mp4' --data-binary @clip.mp4 '<uploadUrl>'
+   ```
+
+   返回 201 后 `mediaId` 即可使用；同一地址再次 PUT 会得到 409，过期是 410，
+   `Content-Type` 与申请时不一致是 415。
+3. **发动态**：`capture_entry` / `log_media` 加上
+   `"mediaIds": ["media_…", "media_…"]`（按顺序展示）。若文字已经先发了，
+   用 `attach_entry_media` 把照片追加到那条记录上。
+
+支持 JPEG、PNG、WebP、GIF、MP4、MOV、WebM；服务端会核对文件头，内容与
+`mimeType` 不符会被拒绝。照片和视频都是私密的，只能在登录后的网页里看到，
+公开接口不会输出它们。`upload_media_image` 仍只用于作品封面这类公开图片。
 
 工具成功和失败都返回 JSON 文本。失败格式稳定为：
 

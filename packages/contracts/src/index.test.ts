@@ -10,6 +10,7 @@ import {
   logMediaInputSchema,
   normalizeMediaTitle,
   publicTimelineResponseSchema,
+  registerEntryMediaInputSchema,
   scoreToInteger,
   updateGameLibraryItemInputSchema,
 } from "./index";
@@ -215,5 +216,44 @@ describe("Life Ledger contracts", () => {
         playTime: "20h",
       }),
     ).toEqual({ versionNo: 3, playTime: "20h" });
+  });
+
+  it("defaults media attachments to none and caps them at nine", () => {
+    const base = {
+      rawText: "拍了几张照片",
+      occurredAt: "2026-09-24T12:00:00+09:00",
+      source: { channel: "web", messageId: null, conversationId: null },
+    };
+    expect(captureEntryInputSchema.parse(base).mediaIds).toEqual([]);
+    expect(() =>
+      captureEntryInputSchema.parse({
+        ...base,
+        mediaIds: Array.from({ length: 10 }, (_, index) => `media_${index}`),
+      }),
+    ).toThrow();
+    expect(() =>
+      captureEntryInputSchema.parse({ ...base, mediaIds: ["media_1", "media_1"] }),
+    ).toThrow();
+  });
+
+  it("accepts only consistent entry media registrations", () => {
+    const key = "entry-media/0b8f6a2e-5c1d-4f7a-9e3b-2d6c8a1f4e70";
+    expect(
+      registerEntryMediaInputSchema.parse({
+        objectKey: `${key}.mp4`,
+        kind: "video",
+        mimeType: "video/mp4",
+        sizeBytes: 50 * 1024 * 1024,
+        durationMs: 12_000,
+      }),
+    ).toMatchObject({ width: null, height: null, durationMs: 12_000 });
+    for (const invalid of [
+      { objectKey: `${key}.mp4`, kind: "image", mimeType: "video/mp4", sizeBytes: 10 },
+      { objectKey: `${key}.jpg`, kind: "image", mimeType: "image/png", sizeBytes: 10 },
+      { objectKey: `${key}.jpg`, kind: "image", mimeType: "image/jpeg", sizeBytes: 30 * 1024 * 1024 },
+      { objectKey: "covers/anime/x-v1.webp", kind: "image", mimeType: "image/webp", sizeBytes: 10 },
+    ]) {
+      expect(() => registerEntryMediaInputSchema.parse(invalid)).toThrow();
+    }
   });
 });

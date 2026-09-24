@@ -2,7 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import {
+  ENTRY_MEDIA_LIMITS,
   captureEntryInputSchema,
+  createEntryMediaUploadInputSchema,
   createGameLibraryItemInputSchema,
   createMediaSeasonInputSchema,
   createMediaWorkInputSchema,
@@ -18,6 +20,7 @@ import {
   datePrecisionSchema,
   onThisDayInputSchema,
   settingsSchema,
+  uploadEntryMediaInputSchema,
   uploadMediaImageInputSchema,
   updateEntryInputSchema,
   updateGameLibraryItemInputSchema,
@@ -53,6 +56,12 @@ export type McpCoreBinding = Pick<
   | "preparePublish"
   | "confirmAction"
   | "unpublishEntry"
+  | "addEntryFollowUp"
+  | "deleteEntryFollowUp"
+  | "uploadEntryMedia"
+  | "createEntryMediaUpload"
+  | "attachEntryMedia"
+  | "deleteEntryMedia"
   | "createImportDryRun"
   | "commitImport"
   | "createExport"
@@ -67,6 +76,14 @@ export type McpCoreBinding = Pick<
 
 const idSchema = z.string().trim().min(1).max(256);
 
+const mediaIdsToolSchema = z
+  .array(idSchema)
+  .max(ENTRY_MEDIA_LIMITS.maxPerEntry)
+  .default([])
+  .describe(
+    "要附在这条记录上的照片/视频 mediaId（最多 9 个，按顺序展示）；先用 upload_entry_media 或 create_entry_media_upload 取得。",
+  );
+
 const captureEntryToolSchema = z.object({
   rawText: z.string().trim().min(1).max(50_000),
   type: z.enum(["thought", "idea", "mood", "note"]).default("note"),
@@ -79,6 +96,7 @@ const captureEntryToolSchema = z.object({
   sourceChannel: z.enum(["wechat", "mcp"]),
   idempotencyKey: z.string().trim().min(1).max(256),
   conversationId: z.string().trim().min(1).max(256).nullable().default(null),
+  mediaIds: mediaIdsToolSchema,
 });
 
 const logMediaToolSchema = z.object({
@@ -100,6 +118,7 @@ const logMediaToolSchema = z.object({
   sourceChannel: z.enum(["wechat", "mcp"]),
   idempotencyKey: z.string().trim().min(1).max(256),
   conversationId: z.string().trim().min(1).max(256).nullable().default(null),
+  mediaIds: mediaIdsToolSchema,
 });
 
 const occurredRangeFields = {
@@ -375,7 +394,7 @@ const safeWriteAnnotations = {
 export function createServer(core: McpCoreBinding): McpServer {
   const server = new McpServer({
     name: "Life Ledger",
-    version: "0.3.0",
+    version: "0.4.0",
   });
 
   server.registerTool(
@@ -395,7 +414,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "读取单条记录",
       description:
-        "按 entryId 读取一条完整记录，包括正文、修订历史与审计信息；不存在时返回 null。",
+        "按 entryId 读取一条完整记录，包括正文、照片/视频（media）、补充（followUps）、修订历史与审计信息；不存在时返回 null。",
       inputSchema: entryIdToolSchema,
       annotations: readOnlyAnnotations,
     },
@@ -503,7 +522,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "创建私密记录",
       description:
-        "创建想法、心情或笔记。新记录强制为私密；必须提供来源渠道与幂等键，重试不会重复写入。",
+        "创建想法、心情或笔记，会出现在网页「今日与时间线」动态里。新记录强制为私密；必须提供来源渠道与幂等键，重试不会重复写入。要附照片/视频时，先上传拿到 mediaId，再通过 mediaIds 传入。",
       inputSchema: captureEntryToolSchema,
       annotations: {
         ...safeWriteAnnotations,
@@ -528,6 +547,7 @@ export function createServer(core: McpCoreBinding): McpServer {
               conversationId: input.conversationId,
             },
             visibility: "private",
+            mediaIds: input.mediaIds,
           }),
         ),
       ),
@@ -750,7 +770,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "上传图片到私有资源桶",
       description:
-        "严格校验 Agent 已压缩的 WebP、JPEG 或 PNG，把内容按 SHA-256 去重写入 R2，并返回前端可直接加载的公开 HTTPS URL；不会自动修改作品封面。",
+        "仅用于作品封面等公开图片：严格校验 Agent 已压缩的 WebP、JPEG 或 PNG，按 SHA-256 去重写入 R2，并返回公开 HTTPS URL；不会自动修改作品封面。动态里的私密照片/视频请用 upload_entry_media 或 create_entry_media_upload。",
       inputSchema: uploadMediaImageInputSchema,
       annotations: {
         ...safeWriteAnnotations,
@@ -816,7 +836,7 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "记录媒体体验",
       description:
-        "创建私密的动漫、影视、游戏或音乐日志，可关联季度/集数、进度、评分与评论；必须提供来源和幂等键。",
+        "创建私密的动漫、影视、游戏或音乐日志，可关联季度/集数、进度、评分与评论；必须提供来源和幂等键。可通过 mediaIds 附上截图、照片或视频。",
       inputSchema: logMediaToolSchema,
       annotations: {
         ...safeWriteAnnotations,
@@ -848,6 +868,7 @@ export function createServer(core: McpCoreBinding): McpServer {
               conversationId: input.conversationId,
             },
             visibility: "private",
+            mediaIds: input.mediaIds,
           }),
         ),
       ),
@@ -902,6 +923,116 @@ export function createServer(core: McpCoreBinding): McpServer {
       },
     },
     ({ entryId }) => toolResult(() => core.unpublishEntry(entryId)),
+  );
+
+  server.registerTool(
+    "upload_entry_media",
+    {
+      title: "上传动态照片/短视频（Base64）",
+      description:
+        "把一张照片或一段很短的视频以 Base64 上传为私密媒体，返回 mediaId；再在 capture_entry / log_media 的 mediaIds 里使用，或用 attach_entry_media 挂到已有记录。解码后不超过 10 MB；更大的文件（尤其是视频）请用 create_entry_media_upload。支持 JPEG、PNG、WebP、GIF、MP4、MOV、WebM，服务端会校验文件头。",
+      inputSchema: uploadEntryMediaInputSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(() =>
+        core.uploadEntryMedia(uploadEntryMediaInputSchema.parse(input)),
+      ),
+  );
+
+  server.registerTool(
+    "create_entry_media_upload",
+    {
+      title: "申请一次性上传地址（大文件/视频）",
+      description:
+        "为一张照片或一段视频（视频最大 95 MB，照片最大 20 MB）申请 30 分钟内有效、只能用一次的上传地址。返回 mediaId、uploadUrl 与 curl 示例：用 HTTP PUT 把文件原始字节发到 uploadUrl，Content-Type 必须与 mimeType 一致（例如 curl -X PUT -H 'Content-Type: video/mp4' --data-binary @clip.mp4 <uploadUrl>）。上传成功后，再把 mediaId 放进 capture_entry / log_media 的 mediaIds 或 attach_entry_media。文件内容不会经过对话上下文。",
+      inputSchema: createEntryMediaUploadInputSchema,
+      annotations: safeWriteAnnotations,
+    },
+    (input) =>
+      toolResult(() =>
+        core.createEntryMediaUpload(
+          createEntryMediaUploadInputSchema.parse(input),
+        ),
+      ),
+  );
+
+  server.registerTool(
+    "attach_entry_media",
+    {
+      title: "给已有记录添加照片/视频",
+      description:
+        "把已上传但尚未使用的 mediaId 追加到一条已有记录后面（例如微信里先发文字、后发照片）。每条记录最多 9 个照片/视频。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        mediaIds: z.array(idSchema).min(1).max(ENTRY_MEDIA_LIMITS.maxPerEntry),
+      }),
+      annotations: safeWriteAnnotations,
+    },
+    ({ entryId, mediaIds }) =>
+      toolResult(() => core.attachEntryMedia(entryId, mediaIds)),
+  );
+
+  server.registerTool(
+    "remove_entry_media",
+    {
+      title: "从记录中移除照片/视频",
+      description:
+        "从记录中移除一个照片或视频，并永久删除存储里的文件，不可恢复。必须显式传入 confirmRemove=true。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        mediaId: idSchema,
+        confirmRemove: z.literal(true),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ entryId, mediaId }) =>
+      toolResult(() => core.deleteEntryMedia(entryId, mediaId)),
+  );
+
+  server.registerTool(
+    "add_entry_follow_up",
+    {
+      title: "补充记录",
+      description:
+        "给已有记录追加一段补充（后续想法），原文保持不变；补充按时间顺序显示在该条动态下方。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        body: z.string().trim().min(1).max(50_000),
+      }),
+      annotations: safeWriteAnnotations,
+    },
+    ({ entryId, body }) =>
+      toolResult(() =>
+        core.addEntryFollowUp(entryId, { body, sourceChannel: "mcp" }),
+      ),
+  );
+
+  server.registerTool(
+    "delete_entry_follow_up",
+    {
+      title: "删除补充",
+      description:
+        "删除一条记录下的某条补充（followUpId 来自 get_entry 返回的 followUps），不可恢复。必须显式传入 confirmDelete=true。",
+      inputSchema: z.object({
+        entryId: idSchema,
+        followUpId: idSchema,
+        confirmDelete: z.literal(true),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ entryId, followUpId }) =>
+      toolResult(() => core.deleteEntryFollowUp(entryId, followUpId)),
   );
 
   server.registerTool(
