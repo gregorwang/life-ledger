@@ -1,0 +1,22 @@
+{
+  "name": "@life-ledger/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "cf:types": "wrangler types",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@life-ledger/contracts": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260726.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10",
+    "wrangler": "4.114.0"
+  }
+}

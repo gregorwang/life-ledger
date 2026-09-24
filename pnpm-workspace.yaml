@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+
+allowBuilds:
+  core-js-pure: true
+  esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@5.20260726.1'
+  - lucide-react@1.27.0
+
+peerDependencyRules:
+  allowedVersions:
+    "@cloudflare/workers-types": ">=4.20260424.1"

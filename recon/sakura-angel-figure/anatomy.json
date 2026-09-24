@@ -1,0 +1,59 @@
+{
+  "sourceImage": "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\front-wide.png",
+  "secondaryViews": [
+    "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\front-close.png",
+    "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\back.png"
+  ],
+  "overlayImage": "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\landmarks-overlay.png",
+  "anatomy": {
+    "styleHeads": 4.5,
+    "proportions": {
+      "headUnit": 0.218,
+      "torso": 1.18,
+      "legs": 2.12,
+      "shoulderWidth": 1.28,
+      "hipWidth": 1.16
+    },
+    "pose": {
+      "type": "seated three-quarter pose with upright torso, both legs sweeping toward viewer-left, and both hands gripping a diagonal staff",
+      "jointAngles": {
+        "neck": [-3, -7, 2],
+        "leftShoulder": [18, -8, -24],
+        "rightShoulder": [-10, 12, 21],
+        "leftElbow": [0, 7, 68],
+        "rightElbow": [0, -8, -74],
+        "leftWrist": [8, 5, 10],
+        "rightWrist": [-5, -4, -14],
+        "leftHip": [28, -18, -42],
+        "rightHip": [18, -12, -28],
+        "leftKnee": [0, 8, 52],
+        "rightKnee": [0, -5, 34],
+        "leftAnkle": [4, 0, -11],
+        "rightAnkle": [-3, 0, 8]
+      }
+    },
+    "faceLandmarks": {
+      "hairline": 0.165,
+      "eyeLine": 0.505,
+      "eyeSpacing": 0.275,
+      "noseBase": 0.665,
+      "mouthLine": 0.765,
+      "earTop": 0.43,
+      "earBottom": 0.69
+    },
+    "features": [
+      "large green irises with dark upper lash mass and paired catchlights",
+      "small tapered jaw and warm blush over the cheeks",
+      "short layered chestnut bob with separated pointed locks",
+      "two upward ahoge tufts and one long curled side strand",
+      "tiny nose relief and short smiling mouth groove",
+      "white crown-like feather ornament behind the hair"
+    ],
+    "confidence": 0.76,
+    "uncertainty": [
+      "lateral head depth and ear placement are inferred because no true side view exists",
+      "the hands and forearms are partly occluded by the staff",
+      "the pelvis and upper legs are largely hidden by the feather skirt"
+    ]
+  }
+}

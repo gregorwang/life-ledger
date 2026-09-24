@@ -1,0 +1,41 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "life-ledger-core",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-07-26",
+  "workers_dev": false,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "MEDIA_PUBLIC_BASE_URL": "https://life-ledger-web.ishallnotwant123.workers.dev/public-media"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "life-ledger-prod",
+      "database_id": "24f5ca7c-b66d-4280-8706-4c41fc4a6390",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "life-ledger-backups"
+    },
+    {
+      "binding": "MEDIA",
+      "bucket_name": "life-ledger-media"
+    }
+  ],
+  "workflows": [
+    {
+      "name": "life-ledger-export",
+      "binding": "EXPORT_WORKFLOW",
+      "class_name": "ExportWorkflow",
+      "schedules": [
+        "20 18 * * *"
+      ]
+    }
+  ]
+}

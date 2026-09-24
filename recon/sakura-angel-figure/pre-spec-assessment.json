@@ -1,0 +1,959 @@
+{
+  "targetName": "木之本樱 天使羽翼坐姿手办",
+  "sourceImage": "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\front-wide.png",
+  "preSpecAssessment": {
+    "objectClass": {
+      "primaryType": "seated PVC anime figurine with ornate staff and feather display base",
+      "primaryDomain": "hybrid",
+      "formLanguage": [
+        "stylized organic character anatomy",
+        "layered radial feather repetition",
+        "faceted crystalline accents",
+        "slender assembled ceremonial staff"
+      ],
+      "structureKind": [
+        "continuous sculpt for head, torso and limbs",
+        "fiber-strand hair clumps",
+        "conforming bodice shell",
+        "assembled feather plates",
+        "tube-and-profile staff assembly",
+        "faceted gemstone inserts"
+      ],
+      "motionPotential": [
+        "whole-object orbit",
+        "named-part selection",
+        "radial explode inspection"
+      ],
+      "materialFamilies": [
+        "warm matte skin PVC",
+        "satin chestnut hair PVC",
+        "ivory feather PVC",
+        "metallic gold trim",
+        "clear-coated pink staff",
+        "translucent cyan and red crystals",
+        "smoked iridescent display base"
+      ],
+      "notes": "Three admitted views cover front, close front, and rear. No true side view exists, so lateral thickness and hidden pelvis/hand geometry remain evidence-labelled inference."
+    },
+    "complexity": {
+      "tier": "ultra-complex",
+      "scores": {
+        "silhouetteComplexity": 3,
+        "componentCount": 3,
+        "hierarchyDepth": 3,
+        "repetitionDensity": 3,
+        "materialLayerCount": 3,
+        "localDetailDensity": 3,
+        "occlusionRisk": 3,
+        "actionReadinessNeed": 2
+      },
+      "estimatedCounts": {
+        "macroComponents": 12,
+        "mesoComponents": 46,
+        "microFeatureGroups": 22,
+        "materialLayers": 9,
+        "repetitionSystems": 5
+      },
+      "reasoning": [
+        "The identity depends on the simultaneous read of stylized anatomy, a diagonal staff, layered hair, and a dense radial feather base.",
+        "The rear reference reveals a separate back ornament and longer asymmetric feather tail that cannot be represented by a shallow front-only shell.",
+        "Metal, matte PVC, clear-coated lacquer, translucent crystal, and smoked clear base require distinct PBR responses.",
+        "The hands, staff, legs, collar, and dress overlap heavily; attachment contracts are required to prevent floating or fused parts."
+      ]
+    },
+    "specDepthDecision": {
+      "requiredDepth": "ultra-complex",
+      "minimumComponentLevels": [
+        "macro",
+        "meso",
+        "micro"
+      ],
+      "needsRepetitionSystems": true,
+      "needsMaterialLocalOverrides": true,
+      "needsMultipleReviewViews": true,
+      "needsActionReadyHierarchy": true,
+      "rationale": "A maximum-likeness character reconstruction needs explicit anatomy, repeated feathers/hair locks, multiple material families, front/rear review cameras, named parts, and per-region uncertainty."
+    },
+    "unknownsToResolveBeforeImplementation": [],
+    "detailInventory": {
+      "scanMethod": "multi-view semantic zones",
+      "targetMinDetails": 16,
+      "details": [
+        {
+          "id": "hair-layered-locks",
+          "kind": "contour",
+          "description": "Twenty-four overlapping pointed chestnut hair locks form the bob silhouette and rear shell.",
+          "region": {
+            "x": 0.36,
+            "y": 0.17,
+            "width": 0.27,
+            "height": 0.25,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "silhouette and likeness",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "hair.lock-repetition"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.94
+        },
+        {
+          "id": "hair-ahoge",
+          "kind": "contour",
+          "description": "Two narrow upward-curving ahoge tufts break the crown silhouette.",
+          "region": {
+            "x": 0.48,
+            "y": 0.12,
+            "width": 0.1,
+            "height": 0.12,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "character identity",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "hair.ahoge-curves"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.92
+        },
+        {
+          "id": "hair-side-curl",
+          "kind": "contour",
+          "description": "A single long curled strand descends on the figure's left side.",
+          "region": {
+            "x": 0.57,
+            "y": 0.25,
+            "width": 0.09,
+            "height": 0.18,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "face framing",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "hair.side-curl"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.9
+        },
+        {
+          "id": "green-eyes",
+          "kind": "gloss",
+          "description": "Large green gradient irises, dark upper lashes, black pupils and paired white catchlights.",
+          "region": {
+            "x": 0.43,
+            "y": 0.31,
+            "width": 0.16,
+            "height": 0.08,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "facial likeness",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "eyes.iris-gradient-catchlights"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.95
+        },
+        {
+          "id": "face-mouth-blush",
+          "kind": "linework",
+          "description": "Tiny recessed smile and soft peach cheek blush sit below the eye line.",
+          "region": {
+            "x": 0.46,
+            "y": 0.36,
+            "width": 0.1,
+            "height": 0.07,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "expression",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "face.mouth-and-blush"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.82
+        },
+        {
+          "id": "head-feather-crown",
+          "kind": "ridge",
+          "description": "A white crown-like fan of narrow feather blades rises behind the bob.",
+          "region": {
+            "x": 0.48,
+            "y": 0.13,
+            "width": 0.14,
+            "height": 0.14,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "upper silhouette",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "head-ornament.feather-fan"
+          },
+          "evidenceRef": "references/back.png",
+          "confidence": 0.88
+        },
+        {
+          "id": "feather-collar",
+          "kind": "ridge",
+          "description": "Layered white feathers radiate around the neck and shoulders in two offset rows.",
+          "region": {
+            "x": 0.31,
+            "y": 0.37,
+            "width": 0.39,
+            "height": 0.19,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "shoulder silhouette",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "collar.feather-repetition"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.93
+        },
+        {
+          "id": "neck-crystal",
+          "kind": "gloss",
+          "description": "A pale cyan translucent snowflake crystal anchors the collar at center chest.",
+          "region": {
+            "x": 0.48,
+            "y": 0.45,
+            "width": 0.08,
+            "height": 0.08,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "material contrast",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "crystal.neck-snowflake"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.91
+        },
+        {
+          "id": "bodice-gold-drip",
+          "kind": "linework",
+          "description": "Metallic gold trim follows the white bodice in an asymmetric dripping contour.",
+          "region": {
+            "x": 0.43,
+            "y": 0.47,
+            "width": 0.2,
+            "height": 0.17,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "outfit identity",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "bodice.gold-drip-trim"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.88
+        },
+        {
+          "id": "waist-starburst",
+          "kind": "ridge",
+          "description": "Layered metallic-gold starburst plates project radially from both hips and lower back.",
+          "region": {
+            "x": 0.42,
+            "y": 0.58,
+            "width": 0.32,
+            "height": 0.2,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "waist silhouette",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "waist-ornament.starburst-plates"
+          },
+          "evidenceRef": "references/back.png",
+          "confidence": 0.95
+        },
+        {
+          "id": "staff-pink-shaft",
+          "kind": "gloss",
+          "description": "Long glossy pink cylindrical staff crosses the figure diagonally from lower-right to upper-left.",
+          "region": {
+            "x": 0.24,
+            "y": 0.14,
+            "width": 0.55,
+            "height": 0.78,
+            "units": "normalized"
+          },
+          "scale": "macro",
+          "affects": "primary silhouette",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "staff-shaft.pink-clearcoat"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.97
+        },
+        {
+          "id": "staff-red-collars",
+          "kind": "gloss",
+          "description": "Deep red gem-like collars cap the shaft near both ends.",
+          "region": {
+            "x": 0.28,
+            "y": 0.18,
+            "width": 0.45,
+            "height": 0.7,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "staff assembly",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "staff-collars.red-gem"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.93
+        },
+        {
+          "id": "staff-winged-head",
+          "kind": "contour",
+          "description": "Gold solar-ring head with eight tapered rays and two layered white wings.",
+          "region": {
+            "x": 0.1,
+            "y": 0.05,
+            "width": 0.36,
+            "height": 0.25,
+            "units": "normalized"
+          },
+          "scale": "macro",
+          "affects": "staff identity",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "staff-head.winged-sun"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.94
+        },
+        {
+          "id": "staff-blue-center",
+          "kind": "gloss",
+          "description": "Faceted translucent blue crystal sits in the gold sun ring.",
+          "region": {
+            "x": 0.25,
+            "y": 0.09,
+            "width": 0.1,
+            "height": 0.1,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "staff focal point",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "crystal.staff-center"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.9
+        },
+        {
+          "id": "hands-grip",
+          "kind": "contour",
+          "description": "Both small hands wrap around the staff at separated heights with visible finger ridges.",
+          "region": {
+            "x": 0.46,
+            "y": 0.45,
+            "width": 0.18,
+            "height": 0.2,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "attachment credibility",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "hands.staff-grip-fingers"
+          },
+          "evidenceRef": "references/front-close.png",
+          "confidence": 0.78
+        },
+        {
+          "id": "seated-leg-sweep",
+          "kind": "contour",
+          "description": "Two asymmetric legs sweep toward viewer-left with one knee crossing the other.",
+          "region": {
+            "x": 0.13,
+            "y": 0.55,
+            "width": 0.42,
+            "height": 0.34,
+            "units": "normalized"
+          },
+          "scale": "macro",
+          "affects": "pose silhouette",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "legs.crossed-seated-pose"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.84
+        },
+        {
+          "id": "ankle-crystal-bows",
+          "kind": "ridge",
+          "description": "Pale cyan crystalline bows and snowflake clusters wrap both ankles.",
+          "region": {
+            "x": 0.13,
+            "y": 0.72,
+            "width": 0.3,
+            "height": 0.16,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "leg ornament",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "shoes.crystal-ankle-bows"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.86
+        },
+        {
+          "id": "gold-shoe-trim",
+          "kind": "gloss",
+          "description": "Metallic gold toe, heel and sole trim frame white high-heeled shoes.",
+          "region": {
+            "x": 0.08,
+            "y": 0.79,
+            "width": 0.32,
+            "height": 0.16,
+            "units": "normalized"
+          },
+          "scale": "micro",
+          "affects": "foot silhouette",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "shoes.gold-trim"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.88
+        },
+        {
+          "id": "skirt-feather-rings",
+          "kind": "ridge",
+          "description": "Three concentric, offset rings of long white feathers form the seated skirt and base.",
+          "region": {
+            "x": 0.23,
+            "y": 0.56,
+            "width": 0.7,
+            "height": 0.38,
+            "units": "normalized"
+          },
+          "scale": "macro",
+          "affects": "dominant base silhouette",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "feather-skirt.concentric-rings"
+          },
+          "evidenceRef": "references/back.png",
+          "confidence": 0.96
+        },
+        {
+          "id": "rear-feather-tail",
+          "kind": "contour",
+          "description": "Several extra-long rear feathers extend beyond the skirt rim in an asymmetric fan.",
+          "region": {
+            "x": 0.03,
+            "y": 0.58,
+            "width": 0.36,
+            "height": 0.31,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "rear silhouette",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "feather-skirt.rear-tail"
+          },
+          "evidenceRef": "references/back.png",
+          "confidence": 0.94
+        },
+        {
+          "id": "iridescent-base",
+          "kind": "gloss",
+          "description": "A dark translucent circular base with blue-violet iridescence is visible beneath feather gaps.",
+          "region": {
+            "x": 0.31,
+            "y": 0.76,
+            "width": 0.5,
+            "height": 0.2,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "grounding and reflection",
+          "mapsTo": {
+            "type": "material.localOverrides",
+            "ref": "display-base.iridescent-clear"
+          },
+          "evidenceRef": "references/front-wide.png",
+          "confidence": 0.75
+        },
+        {
+          "id": "back-bodice-lacing",
+          "kind": "linework",
+          "description": "Gold back trim wraps the white bodice and meets the rear starburst ornament.",
+          "region": {
+            "x": 0.39,
+            "y": 0.39,
+            "width": 0.24,
+            "height": 0.25,
+            "units": "normalized"
+          },
+          "scale": "meso",
+          "affects": "rear outfit identity",
+          "mapsTo": {
+            "type": "component.localFeatures",
+            "ref": "bodice.back-gold-trim"
+          },
+          "evidenceRef": "references/back.png",
+          "confidence": 0.86
+        }
+      ]
+    },
+    "anatomy": {
+      "applies": true,
+      "styleHeads": 4.5,
+      "proportions": {
+        "headUnit": 0.218,
+        "torso": 1.18,
+        "legs": 2.12,
+        "shoulderWidth": 1.28,
+        "hipWidth": 1.16
+      },
+      "pose": {
+        "type": "seated three-quarter pose with upright torso, both legs sweeping toward viewer-left, and both hands gripping a diagonal staff",
+        "jointAngles": {
+          "neck": [
+            -3,
+            -7,
+            2
+          ],
+          "leftShoulder": [
+            18,
+            -8,
+            -24
+          ],
+          "rightShoulder": [
+            -10,
+            12,
+            21
+          ],
+          "leftElbow": [
+            0,
+            7,
+            68
+          ],
+          "rightElbow": [
+            0,
+            -8,
+            -74
+          ],
+          "leftWrist": [
+            8,
+            5,
+            10
+          ],
+          "rightWrist": [
+            -5,
+            -4,
+            -14
+          ],
+          "leftHip": [
+            28,
+            -18,
+            -42
+          ],
+          "rightHip": [
+            18,
+            -12,
+            -28
+          ],
+          "leftKnee": [
+            0,
+            8,
+            52
+          ],
+          "rightKnee": [
+            0,
+            -5,
+            34
+          ],
+          "leftAnkle": [
+            4,
+            0,
+            -11
+          ],
+          "rightAnkle": [
+            -3,
+            0,
+            8
+          ]
+        }
+      },
+      "faceLandmarks": {
+        "hairline": 0.165,
+        "eyeLine": 0.505,
+        "eyeSpacing": 0.275,
+        "noseBase": 0.665,
+        "mouthLine": 0.765,
+        "earTop": 0.43,
+        "earBottom": 0.69
+      },
+      "features": [
+        "large green irises with dark upper lash mass and paired catchlights",
+        "small tapered jaw and warm blush over the cheeks",
+        "short layered chestnut bob with separated pointed locks",
+        "two upward ahoge tufts and one long curled side strand",
+        "tiny nose relief and short smiling mouth groove",
+        "white crown-like feather ornament behind the hair"
+      ],
+      "confidence": 0.76,
+      "uncertainty": [
+        "lateral head depth and ear placement are inferred because no true side view exists",
+        "the hands and forearms are partly occluded by the staff",
+        "the pelvis and upper legs are largely hidden by the feather skirt"
+      ],
+      "note": "Landmarks were fitted from admitted front/rear images. Values describe the stylized figurine, not realistic adult anatomy."
+    },
+    "sourceImage": "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\front-wide.png",
+    "resolvedUncertaintyRegister": [
+      {
+        "region": "left and right side profile",
+        "uncertainty": "No true side photograph; head depth, torso thickness and radial skirt height must be inferred from front/rear parallax.",
+        "mitigation": "Use conservative ellipsoid depth and validate two non-degenerate orbit views; mark side confidence medium."
+      },
+      {
+        "region": "hands and staff contact",
+        "uncertainty": "Fingers are partly hidden by the staff and sleeve feathers.",
+        "mitigation": "Model palm volumes plus individual finger capsules wrapped around a shared staff socket; mark fine finger placement medium."
+      },
+      {
+        "region": "pelvis and upper legs",
+        "uncertainty": "Feather skirt obscures the seated contact surface.",
+        "mitigation": "Build a plausible seated pelvis and thigh chain beneath the dress, but do not claim scan-exact hidden anatomy."
+      },
+      {
+        "region": "display base",
+        "uncertainty": "Only narrow gaps reveal the dark iridescent base and its exact plan shape.",
+        "mitigation": "Use a low smoked circular plinth under the feather mound with low-confidence label."
+      }
+    ]
+  },
+  "qualityContract": {
+    "qualityBar": "ultra-complex",
+    "definitionOfDone": [
+      "Front view preserves the large head, green eyes, short chestnut bob, seated leg sweep, diagonal staff and concentric feather-skirt silhouette.",
+      "Rear view preserves the layered bob shell, gold back ornament and asymmetric long feather tail instead of collapsing to a front-only slab.",
+      "The staff includes a glossy pink shaft, red collars, gold winged solar head and translucent blue center with credible hand contact.",
+      "White PVC, warm skin, chestnut hair, metallic gold, lacquered pink, translucent cyan/red and smoked base remain materially distinct under relighting.",
+      "Every macro component is named, selectable, and participates in a center-scaled explode view without breaking child attachments.",
+      "Front, rear, three-quarter-left, three-quarter-right and top-oblique review views remain volumetric and non-degenerate.",
+      "Hidden side and underside geometry is explicitly reported as inferred rather than scan-exact."
+    ],
+    "minimumSpecDepth": {
+      "macroComponents": 5,
+      "mesoComponents": 16,
+      "microFeatureGroups": 8,
+      "materialLayers": 4,
+      "repetitionSystems": 2,
+      "reviewViewpoints": 5
+    },
+    "featureGroups": [
+      {
+        "id": "overall-silhouette",
+        "name": "Overall silhouette and proportions",
+        "required": true,
+        "qualityCriteria": [
+          "Bounding shape, dominant curves, negative spaces, and scale relationships are explicitly described."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model reads as a generic placeholder instead of the reference object",
+          "major proportions are guessed without evidence"
+        ]
+      },
+      {
+        "id": "primary-structure",
+        "name": "Primary structure and hierarchy",
+        "required": true,
+        "qualityCriteria": [
+          "Major parts, joints, seams, contact points, and parent-child relationships are named before code generation."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "large visible parts are merged into one mesh",
+          "component hierarchy is too shallow for the observed complexity"
+        ]
+      },
+      {
+        "id": "attachment-joint-correctness",
+        "name": "Attachment and joint correctness",
+        "required": true,
+        "qualityCriteria": [
+          "Every visible child appendage, branch, limb, handle, connector, tube, cable, horn, wing, leg, or hinged part has an attachment contract with parent socket, localStart/localEnd, contact type, embed/overlap, and gap tolerance."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "child part root floats away from the parent",
+          "branch/limb/tube is centered in space instead of pivoting from its root",
+          "parent-child transform mixes world and local coordinates"
+        ]
+      },
+      {
+        "id": "surface-material-response",
+        "name": "Surface material response",
+        "required": true,
+        "qualityCriteria": [
+          "Albedo zones, roughness, normal/bump/displacement intent, cavity dirt, edge wear, and local overrides are specified where visible.",
+          "Important materials define independent albedo, roughness, height/normal, and AO responses instead of reusing one texture for unrelated PBR channels.",
+          "Surface response is decomposed into macro, meso, and micro frequency bands with scale and amplitude tied to object scale."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "surface looks like flat plastic",
+          "local material variation is missing or not tied to image evidence"
+        ]
+      },
+      {
+        "id": "reference-lookdev",
+        "name": "Reference color, material, and lighting response",
+        "required": true,
+        "qualityCriteria": [
+          "Material-pass names the reference-derived albedo palette, roughness variation, tactile normal/bump/displacement response, and local masks.",
+          "When a source image is available, run reference PBR extraction and require confidence >= 0.7 before treating maps as implementation-ready.",
+          "Lighting-pass names key/fill/rim or environment light, exposure, tone mapping, background, and contact shadow behavior.",
+          "Neutral, grazing-angle, and reference-matched renders prove that surface relief survives relighting and is not painted into albedo."
+        ],
+        "evidenceRefs": [
+          "full-object"
+        ],
+        "failureModes": [
+          "model has acceptable shape but reads as flat shaded or plastic",
+          "colors are a generic average instead of reference-observed local color zones",
+          "lighting is evenly ambient and cannot reproduce the source value range"
+        ]
+      },
+      {
+        "id": "character-likeness",
+        "name": "Character anatomy and facial likeness",
+        "required": true,
+        "qualityCriteria": [
+          "Head-to-body ratio, green eye placement, tapered jaw, bob silhouette, ahoge and side curl follow measured landmarks.",
+          "The seated pose reads without the feather skirt, and the staff grip remains attached during explode inspection."
+        ],
+        "evidenceRefs": [
+          "references/front-close.png",
+          "anatomy.json"
+        ],
+        "failureModes": [
+          "generic mannequin face",
+          "standing or symmetric leg pose",
+          "hair represented as one smooth helmet"
+        ]
+      },
+      {
+        "id": "feather-repetition",
+        "name": "Feather systems and rear silhouette",
+        "required": true,
+        "qualityCriteria": [
+          "Collar and skirt use separate, overlapping feather geometry with tapered profiles and non-uniform radial distribution.",
+          "Rear tail feathers extend farther than the front ring and remain visible in the rear review."
+        ],
+        "evidenceRefs": [
+          "references/front-wide.png",
+          "references/back.png"
+        ],
+        "failureModes": [
+          "single scalloped disc used as a skirt",
+          "uniform repeated cones",
+          "front-only feather silhouette"
+        ]
+      },
+      {
+        "id": "staff-identity",
+        "name": "Ceremonial staff identity",
+        "required": true,
+        "qualityCriteria": [
+          "Shaft angle, overall length, winged sun head, crystal center, red collars and gold pointed tip match the references.",
+          "Hands visibly wrap the shaft instead of floating beside it."
+        ],
+        "evidenceRefs": [
+          "references/front-wide.png",
+          "references/back.png"
+        ],
+        "failureModes": [
+          "generic wand",
+          "missing wing feathers or solar rays",
+          "staff detached from hands"
+        ]
+      },
+      {
+        "id": "character-likeness",
+        "name": "Character anatomy and facial likeness",
+        "required": true,
+        "qualityCriteria": [
+          "Head-to-body ratio, green eye placement, tapered jaw, bob silhouette, ahoge and side curl follow measured landmarks.",
+          "The seated pose reads without the feather skirt, and the staff grip remains attached during explode inspection."
+        ],
+        "evidenceRefs": [
+          "references/front-close.png",
+          "anatomy.json"
+        ],
+        "failureModes": [
+          "generic mannequin face",
+          "standing or symmetric leg pose",
+          "hair represented as one smooth helmet"
+        ]
+      },
+      {
+        "id": "feather-repetition",
+        "name": "Feather systems and rear silhouette",
+        "required": true,
+        "qualityCriteria": [
+          "Collar and skirt use separate, overlapping feather geometry with tapered profiles and non-uniform radial distribution.",
+          "Rear tail feathers extend farther than the front ring and remain visible in the rear review."
+        ],
+        "evidenceRefs": [
+          "references/front-wide.png",
+          "references/back.png"
+        ],
+        "failureModes": [
+          "single scalloped disc used as a skirt",
+          "uniform repeated cones",
+          "front-only feather silhouette"
+        ]
+      },
+      {
+        "id": "staff-identity",
+        "name": "Ceremonial staff identity",
+        "required": true,
+        "qualityCriteria": [
+          "Shaft angle, overall length, winged sun head, crystal center, red collars and gold pointed tip match the references.",
+          "Hands visibly wrap the shaft instead of floating beside it."
+        ],
+        "evidenceRefs": [
+          "references/front-wide.png",
+          "references/back.png"
+        ],
+        "failureModes": [
+          "generic wand",
+          "missing wing feathers or solar rays",
+          "staff detached from hands"
+        ]
+      }
+    ],
+    "visualDeltaChecks": [
+      "silhouette and negative-space delta",
+      "component hierarchy depth delta",
+      "repetition density and distribution delta",
+      "material albedo/roughness/normal response delta",
+      "local feature placement and scale delta",
+      "front/rear head-to-skirt scale and vertical placement delta",
+      "staff endpoint, angle, wing span and hand-contact delta",
+      "eye line, eye spacing, jaw width and bob contour delta",
+      "collar/skirt feather count, overlap, taper and rear-tail delta",
+      "gold trim, pink lacquer, cyan crystal and smoked-base material separation delta",
+      "front/rear head-to-skirt scale and vertical placement delta",
+      "staff endpoint, angle, wing span and hand-contact delta",
+      "eye line, eye spacing, jaw width and bob contour delta",
+      "collar/skirt feather count, overlap, taper and rear-tail delta",
+      "gold trim, pink lacquer, cyan crystal and smoked-base material separation delta"
+    ],
+    "antiShallowSpecRules": [
+      "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+      "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+      "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+      "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+      "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+      "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+      "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+      "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+      "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+      "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+      "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md)."
+    ]
+  },
+  "authoringInstruction": "Assessment completed from three admitted views. Generate the character/hybrid sculpt spec, preserve all mapped detail references, and carry hidden-side uncertainty into review.",
+  "localSpecSearch": {
+    "collection": "core_3d",
+    "query": "木之本樱 天使羽翼坐姿手办 anime figurine seated pose feather dress staff hair clumps PVC multi-view character projection front back",
+    "index": {
+      "status": "rebuilt",
+      "reason": "missing",
+      "fingerprint": "6857e5ab528b42ac12f4f411f862610a0bffce8e47aee3610a7603c318072fe8"
+    },
+    "matches": [
+      {
+        "record_id": "core.uv-strategy",
+        "file_path": "grimoire/glossary/3d_vocabulary.md",
+        "heading": "Geometry And Topology",
+        "key_path": null,
+        "score": 6.598195160406,
+        "snippets": [
+          "UV strategy can use generated procedural coordinates, cylindrical projection, triplanar-like mapping, or atlas-ready unwrapped regions."
+        ],
+        "source_refs": [
+          {
+            "path": "grimoire/glossary/3d_vocabulary.md",
+            "heading": "Geometry And Topology",
+            "key_path": null
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "grimoire/glossary/3d_vocabulary.md"
+          },
+          {
+            "kind": "notebooklm-research",
+            "ref": "notebooklm:4b03c2f9-8393-411f-b5b4-039ab9532843",
+            "note": "Validated generic schema vocabulary; numeric claims remain backed by local source_refs."
+          }
+        ]
+      },
+      {
+        "record_id": "core.shader-mapping-reconstruction-metadata-schema",
+        "file_path": "docs/raw/img2threejs-skill-dataset.json",
+        "heading": null,
+        "key_path": "categories.rendering_shader_mapping[15]",
+        "score": 3.216345807599,
+        "snippets": [
+          "... để điều khiển và kiểm tra pipeline. Recognition cues: Needed whenever an agent must trace a generated Three.js asset back to its source skin/paint_seed/rarity for QA or reproducibility Dấu hiệu nhận diện: Cần khi agent phải truy vết một ..."
+        ],
+        "source_refs": [
+          {
+            "path": "docs/raw/img2threejs-skill-dataset.json",
+            "heading": null,
+            "key_path": "categories.rendering_shader_mapping[15]"
+          }
+        ],
+        "evidence_refs": [
+          {
+            "kind": "source",
+            "ref": "docs/raw/img2threejs-skill-dataset.json",
+            "note": "img2threejs NotebookLM research distillation"
+          }
+        ]
+      }
+    ]
+  }
+}

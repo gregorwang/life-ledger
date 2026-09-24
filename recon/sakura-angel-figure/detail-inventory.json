@@ -1,0 +1,256 @@
+{
+  "sourceImage": "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\front-wide.png",
+  "secondaryViews": [
+    "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\front-close.png",
+    "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\references\\back.png"
+  ],
+  "zonesDir": "C:\\Users\\汪家俊\\proui\\life-ledger\\recon\\sakura-angel-figure\\detail-zones",
+  "detailInventory": {
+    "scanMethod": "multi-view semantic zones",
+    "targetMinDetails": 16,
+    "details": [
+      {
+        "id": "hair-layered-locks",
+        "kind": "contour",
+        "description": "Twenty-four overlapping pointed chestnut hair locks form the bob silhouette and rear shell.",
+        "region": {"x": 0.36, "y": 0.17, "width": 0.27, "height": 0.25, "units": "normalized"},
+        "scale": "meso",
+        "affects": "silhouette and likeness",
+        "mapsTo": {"type": "component.localFeatures", "ref": "hair.lock-repetition"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.94
+      },
+      {
+        "id": "hair-ahoge",
+        "kind": "contour",
+        "description": "Two narrow upward-curving ahoge tufts break the crown silhouette.",
+        "region": {"x": 0.48, "y": 0.12, "width": 0.1, "height": 0.12, "units": "normalized"},
+        "scale": "micro",
+        "affects": "character identity",
+        "mapsTo": {"type": "component.localFeatures", "ref": "hair.ahoge-curves"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.92
+      },
+      {
+        "id": "hair-side-curl",
+        "kind": "contour",
+        "description": "A single long curled strand descends on the figure's left side.",
+        "region": {"x": 0.57, "y": 0.25, "width": 0.09, "height": 0.18, "units": "normalized"},
+        "scale": "micro",
+        "affects": "face framing",
+        "mapsTo": {"type": "component.localFeatures", "ref": "hair.side-curl"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.9
+      },
+      {
+        "id": "green-eyes",
+        "kind": "gloss",
+        "description": "Large green gradient irises, dark upper lashes, black pupils and paired white catchlights.",
+        "region": {"x": 0.43, "y": 0.31, "width": 0.16, "height": 0.08, "units": "normalized"},
+        "scale": "micro",
+        "affects": "facial likeness",
+        "mapsTo": {"type": "material.localOverrides", "ref": "eyes.iris-gradient-catchlights"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.95
+      },
+      {
+        "id": "face-mouth-blush",
+        "kind": "linework",
+        "description": "Tiny recessed smile and soft peach cheek blush sit below the eye line.",
+        "region": {"x": 0.46, "y": 0.36, "width": 0.1, "height": 0.07, "units": "normalized"},
+        "scale": "micro",
+        "affects": "expression",
+        "mapsTo": {"type": "component.localFeatures", "ref": "face.mouth-and-blush"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.82
+      },
+      {
+        "id": "head-feather-crown",
+        "kind": "ridge",
+        "description": "A white crown-like fan of narrow feather blades rises behind the bob.",
+        "region": {"x": 0.48, "y": 0.13, "width": 0.14, "height": 0.14, "units": "normalized"},
+        "scale": "meso",
+        "affects": "upper silhouette",
+        "mapsTo": {"type": "component.localFeatures", "ref": "head-ornament.feather-fan"},
+        "evidenceRef": "references/back.png",
+        "confidence": 0.88
+      },
+      {
+        "id": "feather-collar",
+        "kind": "ridge",
+        "description": "Layered white feathers radiate around the neck and shoulders in two offset rows.",
+        "region": {"x": 0.31, "y": 0.37, "width": 0.39, "height": 0.19, "units": "normalized"},
+        "scale": "meso",
+        "affects": "shoulder silhouette",
+        "mapsTo": {"type": "component.localFeatures", "ref": "collar.feather-repetition"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.93
+      },
+      {
+        "id": "neck-crystal",
+        "kind": "gloss",
+        "description": "A pale cyan translucent snowflake crystal anchors the collar at center chest.",
+        "region": {"x": 0.48, "y": 0.45, "width": 0.08, "height": 0.08, "units": "normalized"},
+        "scale": "micro",
+        "affects": "material contrast",
+        "mapsTo": {"type": "material.localOverrides", "ref": "crystal.neck-snowflake"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.91
+      },
+      {
+        "id": "bodice-gold-drip",
+        "kind": "linework",
+        "description": "Metallic gold trim follows the white bodice in an asymmetric dripping contour.",
+        "region": {"x": 0.43, "y": 0.47, "width": 0.2, "height": 0.17, "units": "normalized"},
+        "scale": "meso",
+        "affects": "outfit identity",
+        "mapsTo": {"type": "component.localFeatures", "ref": "bodice.gold-drip-trim"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.88
+      },
+      {
+        "id": "waist-starburst",
+        "kind": "ridge",
+        "description": "Layered metallic-gold starburst plates project radially from both hips and lower back.",
+        "region": {"x": 0.42, "y": 0.58, "width": 0.32, "height": 0.2, "units": "normalized"},
+        "scale": "meso",
+        "affects": "waist silhouette",
+        "mapsTo": {"type": "component.localFeatures", "ref": "waist-ornament.starburst-plates"},
+        "evidenceRef": "references/back.png",
+        "confidence": 0.95
+      },
+      {
+        "id": "staff-pink-shaft",
+        "kind": "gloss",
+        "description": "Long glossy pink cylindrical staff crosses the figure diagonally from lower-right to upper-left.",
+        "region": {"x": 0.24, "y": 0.14, "width": 0.55, "height": 0.78, "units": "normalized"},
+        "scale": "macro",
+        "affects": "primary silhouette",
+        "mapsTo": {"type": "material.localOverrides", "ref": "staff-shaft.pink-clearcoat"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.97
+      },
+      {
+        "id": "staff-red-collars",
+        "kind": "gloss",
+        "description": "Deep red gem-like collars cap the shaft near both ends.",
+        "region": {"x": 0.28, "y": 0.18, "width": 0.45, "height": 0.7, "units": "normalized"},
+        "scale": "micro",
+        "affects": "staff assembly",
+        "mapsTo": {"type": "material.localOverrides", "ref": "staff-collars.red-gem"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.93
+      },
+      {
+        "id": "staff-winged-head",
+        "kind": "contour",
+        "description": "Gold solar-ring head with eight tapered rays and two layered white wings.",
+        "region": {"x": 0.1, "y": 0.05, "width": 0.36, "height": 0.25, "units": "normalized"},
+        "scale": "macro",
+        "affects": "staff identity",
+        "mapsTo": {"type": "component.localFeatures", "ref": "staff-head.winged-sun"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.94
+      },
+      {
+        "id": "staff-blue-center",
+        "kind": "gloss",
+        "description": "Faceted translucent blue crystal sits in the gold sun ring.",
+        "region": {"x": 0.25, "y": 0.09, "width": 0.1, "height": 0.1, "units": "normalized"},
+        "scale": "micro",
+        "affects": "staff focal point",
+        "mapsTo": {"type": "material.localOverrides", "ref": "crystal.staff-center"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.9
+      },
+      {
+        "id": "hands-grip",
+        "kind": "contour",
+        "description": "Both small hands wrap around the staff at separated heights with visible finger ridges.",
+        "region": {"x": 0.46, "y": 0.45, "width": 0.18, "height": 0.2, "units": "normalized"},
+        "scale": "meso",
+        "affects": "attachment credibility",
+        "mapsTo": {"type": "component.localFeatures", "ref": "hands.staff-grip-fingers"},
+        "evidenceRef": "references/front-close.png",
+        "confidence": 0.78
+      },
+      {
+        "id": "seated-leg-sweep",
+        "kind": "contour",
+        "description": "Two asymmetric legs sweep toward viewer-left with one knee crossing the other.",
+        "region": {"x": 0.13, "y": 0.55, "width": 0.42, "height": 0.34, "units": "normalized"},
+        "scale": "macro",
+        "affects": "pose silhouette",
+        "mapsTo": {"type": "component.localFeatures", "ref": "legs.crossed-seated-pose"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.84
+      },
+      {
+        "id": "ankle-crystal-bows",
+        "kind": "ridge",
+        "description": "Pale cyan crystalline bows and snowflake clusters wrap both ankles.",
+        "region": {"x": 0.13, "y": 0.72, "width": 0.3, "height": 0.16, "units": "normalized"},
+        "scale": "micro",
+        "affects": "leg ornament",
+        "mapsTo": {"type": "component.localFeatures", "ref": "shoes.crystal-ankle-bows"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.86
+      },
+      {
+        "id": "gold-shoe-trim",
+        "kind": "gloss",
+        "description": "Metallic gold toe, heel and sole trim frame white high-heeled shoes.",
+        "region": {"x": 0.08, "y": 0.79, "width": 0.32, "height": 0.16, "units": "normalized"},
+        "scale": "micro",
+        "affects": "foot silhouette",
+        "mapsTo": {"type": "material.localOverrides", "ref": "shoes.gold-trim"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.88
+      },
+      {
+        "id": "skirt-feather-rings",
+        "kind": "ridge",
+        "description": "Three concentric, offset rings of long white feathers form the seated skirt and base.",
+        "region": {"x": 0.23, "y": 0.56, "width": 0.7, "height": 0.38, "units": "normalized"},
+        "scale": "macro",
+        "affects": "dominant base silhouette",
+        "mapsTo": {"type": "component.localFeatures", "ref": "feather-skirt.concentric-rings"},
+        "evidenceRef": "references/back.png",
+        "confidence": 0.96
+      },
+      {
+        "id": "rear-feather-tail",
+        "kind": "contour",
+        "description": "Several extra-long rear feathers extend beyond the skirt rim in an asymmetric fan.",
+        "region": {"x": 0.03, "y": 0.58, "width": 0.36, "height": 0.31, "units": "normalized"},
+        "scale": "meso",
+        "affects": "rear silhouette",
+        "mapsTo": {"type": "component.localFeatures", "ref": "feather-skirt.rear-tail"},
+        "evidenceRef": "references/back.png",
+        "confidence": 0.94
+      },
+      {
+        "id": "iridescent-base",
+        "kind": "gloss",
+        "description": "A dark translucent circular base with blue-violet iridescence is visible beneath feather gaps.",
+        "region": {"x": 0.31, "y": 0.76, "width": 0.5, "height": 0.2, "units": "normalized"},
+        "scale": "meso",
+        "affects": "grounding and reflection",
+        "mapsTo": {"type": "material.localOverrides", "ref": "display-base.iridescent-clear"},
+        "evidenceRef": "references/front-wide.png",
+        "confidence": 0.75
+      },
+      {
+        "id": "back-bodice-lacing",
+        "kind": "linework",
+        "description": "Gold back trim wraps the white bodice and meets the rear starburst ornament.",
+        "region": {"x": 0.39, "y": 0.39, "width": 0.24, "height": 0.25, "units": "normalized"},
+        "scale": "meso",
+        "affects": "rear outfit identity",
+        "mapsTo": {"type": "component.localFeatures", "ref": "bodice.back-gold-trim"},
+        "evidenceRef": "references/back.png",
+        "confidence": 0.86
+      }
+    ]
+  }
+}

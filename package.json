@@ -1,0 +1,25 @@
+{
+  "name": "life-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "pnpm --filter @life-ledger/web dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "assets:prepare-r2": "python scripts/prepare-r2-media.py",
+    "cf:types": "pnpm --filter @life-ledger/core cf:types && pnpm --filter @life-ledger/web cf:types && pnpm --filter @life-ledger/mcp cf:types",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --config services/core/wrangler.jsonc",
+    "db:seed:local": "wrangler d1 execute DB --local --config services/core/wrangler.jsonc --file seed/dev.sql",
+    "db:prepare:dev": "wrangler d1 migrations apply DB --local --persist-to apps/web/.wrangler/state --config services/core/wrangler.jsonc && wrangler d1 execute DB --local --persist-to apps/web/.wrangler/state --config services/core/wrangler.jsonc --file seed/dev.sql",
+    "db:migrate:remote": "wrangler d1 migrations apply life-ledger-prod --remote --config services/core/wrangler.jsonc",
+    "deploy:core": "wrangler deploy --config services/core/wrangler.jsonc",
+    "deploy:mcp": "pnpm --filter @life-ledger/mcp run deploy",
+    "deploy:web": "pnpm --filter @life-ledger/web run deploy"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "wrangler": "4.114.0"
+  }
+}

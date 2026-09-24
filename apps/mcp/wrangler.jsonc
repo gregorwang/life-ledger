@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "life-ledger-mcp",
+  "main": "./src/index.ts",
+  "compatibility_date": "2026-07-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "AGENT_IP_ALLOWLIST": "96.9.210.39,2402:a7c0:8100:a017::1c5:a"
+  },
+  "services": [
+    {
+      "binding": "CORE",
+      "service": "life-ledger-core"
+    }
+  ]
+}

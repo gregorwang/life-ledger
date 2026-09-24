@@ -1,0 +1,658 @@
+{
+  "schemaVersion": "1.0",
+  "source": "https://xn--cckl9nsb.com/game/playstation",
+  "importedAt": "2026-07-26T07:43:08.550Z",
+  "itemCount": 25,
+  "items": [
+    {
+      "id": "game_ps_009",
+      "sourceId": 9,
+      "platform": "PlayStation",
+      "title": "艾尔登法环",
+      "playTime": "100h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 3,
+        "gold": 14,
+        "silver": 24,
+        "bronze": 0
+      },
+      "achievementsCurrent": 42,
+      "achievementsTotal": 42,
+      "rating": 10,
+      "review": "真正的史诗",
+      "tags": [
+        "魂系",
+        "开放世界",
+        "动作"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/ring.1092c82b.webp",
+      "coverUrl": "/media/covers/game/game-009-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_016",
+      "sourceId": 16,
+      "platform": "PlayStation",
+      "title": "SEKIRO: SHADOWS DIE TWICE",
+      "playTime": "28.5h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 1,
+        "gold": 4,
+        "silver": 11,
+        "bronze": 18
+      },
+      "achievementsCurrent": 34,
+      "achievementsTotal": 34,
+      "rating": 10,
+      "review": "心中的义父已经无伤了",
+      "tags": [
+        "魂系",
+        "忍者",
+        "动作"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/sekiro.6415d7a8.webp",
+      "coverUrl": "/media/covers/game/game-016-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_024",
+      "sourceId": 24,
+      "platform": "PlayStation",
+      "title": "光与影：33号远征队",
+      "playTime": "75.9h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 2,
+        "gold": 5,
+        "silver": 48,
+        "bronze": 0
+      },
+      "achievementsCurrent": 100,
+      "achievementsTotal": 100,
+      "rating": 10,
+      "review": "估计得年度游戏了，以前从没觉得回合制游戏有这么好玩。",
+      "tags": [
+        "回合制",
+        "RPG",
+        "剧情"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/33.d0ccc784.webp",
+      "coverUrl": "/media/covers/game/game-024-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_025",
+      "sourceId": 25,
+      "platform": "PlayStation",
+      "title": "羊蹄山之魂",
+      "playTime": "61.3h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 2,
+        "gold": 7,
+        "silver": 44,
+        "bronze": 0
+      },
+      "achievementsCurrent": 100,
+      "achievementsTotal": 100,
+      "rating": 10,
+      "review": "不多说了，玩哭了，活下去就是为了玩游戏啊",
+      "tags": [
+        "剧情",
+        "冒险",
+        "叙事"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/yts.e18b9365.webp",
+      "coverUrl": "/media/covers/game/game-025-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_014",
+      "sourceId": 14,
+      "platform": "PlayStation",
+      "title": "浪人崛起",
+      "playTime": "59h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 2,
+        "gold": 9,
+        "silver": 39,
+        "bronze": 0
+      },
+      "achievementsCurrent": 51,
+      "achievementsTotal": 51,
+      "rating": 9,
+      "review": "战斗爽战斗爽",
+      "tags": [
+        "动作",
+        "冒险",
+        "历史"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/header_schinese.e54a48ea.webp",
+      "coverUrl": "/media/covers/game/game-014-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_018",
+      "sourceId": 18,
+      "platform": "PlayStation",
+      "title": "宇宙机器人",
+      "playTime": "25.3h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 1,
+        "gold": 2,
+        "silver": 17,
+        "bronze": 24
+      },
+      "achievementsCurrent": 44,
+      "achievementsTotal": 44,
+      "rating": 9,
+      "review": "神中神2024tga冠军实至名归感觉比马里奥奥德赛好玩",
+      "tags": [
+        "平台",
+        "冒险",
+        "可爱"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/robot.6a85231b.webp",
+      "coverUrl": "/media/covers/game/game-018-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_021",
+      "sourceId": 21,
+      "platform": "PlayStation",
+      "title": "瑞奇与叮当：时空跳转",
+      "playTime": "20.9h",
+      "progress": 100,
+      "trophies": {
+        "platinum": 1,
+        "gold": 3,
+        "silver": 7,
+        "bronze": 36
+      },
+      "achievementsCurrent": 47,
+      "achievementsTotal": 47,
+      "rating": 9,
+      "review": "PS5性能的完美体现",
+      "tags": [
+        "平台",
+        "冒险",
+        "科幻"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/ruiqi.4df1671f.webp",
+      "coverUrl": "/media/covers/game/game-021-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_007",
+      "sourceId": 7,
+      "platform": "PlayStation",
+      "title": "漫威蜘蛛侠2",
+      "playTime": "35h",
+      "progress": 98,
+      "trophies": {
+        "platinum": 2,
+        "gold": 17,
+        "silver": 22,
+        "bronze": 1
+      },
+      "achievementsCurrent": 42,
+      "achievementsTotal": 43,
+      "rating": 9,
+      "review": "剧情战斗爽中爽",
+      "tags": [
+        "动作",
+        "开放世界",
+        "超级英雄"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/sp.b713c672.webp",
+      "coverUrl": "/media/covers/game/game-007-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_023",
+      "sourceId": 23,
+      "platform": "PlayStation",
+      "title": "鸣潮",
+      "playTime": "214h",
+      "progress": 93,
+      "trophies": {
+        "platinum": 2,
+        "gold": 11,
+        "silver": 54,
+        "bronze": 0
+      },
+      "achievementsCurrent": 93,
+      "achievementsTotal": 100,
+      "rating": 9,
+      "review": "嗯，可以动的二次元类galgame？打破了我对二游的刻板印象",
+      "tags": [
+        "动作",
+        "ARPG",
+        "二次元"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/mingchao.f0ccae38.webp",
+      "coverUrl": "/media/covers/game/game-023-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_004",
+      "sourceId": 4,
+      "platform": "PlayStation",
+      "title": "心灵杀手2",
+      "playTime": "45h",
+      "progress": 91,
+      "trophies": {
+        "platinum": 0,
+        "gold": 3,
+        "silver": 77,
+        "bronze": 1
+      },
+      "achievementsCurrent": 81,
+      "achievementsTotal": 89,
+      "rating": 9,
+      "review": "音乐和创意剧情拉满画质也写实",
+      "tags": [
+        "恐怖",
+        "悬疑",
+        "剧情"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/hertkinll.6e9cbf04.webp",
+      "coverUrl": "/media/covers/game/game-004-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_010",
+      "sourceId": 10,
+      "platform": "PlayStation",
+      "title": "地平线 西之绝境",
+      "playTime": "91h",
+      "progress": 90,
+      "trophies": {
+        "platinum": 2,
+        "gold": 9,
+        "silver": 60,
+        "bronze": 0
+      },
+      "achievementsCurrent": 72,
+      "achievementsTotal": 80,
+      "rating": 9,
+      "review": "当今3a游戏画质第一",
+      "tags": [
+        "开放世界",
+        "动作",
+        "冒险"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/forb.a8b224ef.webp",
+      "coverUrl": "/media/covers/game/game-010-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_013",
+      "sourceId": 13,
+      "platform": "PlayStation",
+      "title": "地平线 零之曙光",
+      "playTime": "61h",
+      "progress": 90,
+      "trophies": {
+        "platinum": 2,
+        "gold": 10,
+        "silver": 58,
+        "bronze": 0
+      },
+      "achievementsCurrent": 71,
+      "achievementsTotal": 79,
+      "rating": 9,
+      "review": "比原神画质强",
+      "tags": [
+        "开放世界",
+        "动作",
+        "冒险"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/header.084585ae.webp",
+      "coverUrl": "/media/covers/game/game-013-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_012",
+      "sourceId": 12,
+      "platform": "PlayStation",
+      "title": "对马岛之魂：导演剪辑版",
+      "playTime": "65h",
+      "progress": 78,
+      "trophies": {
+        "platinum": 2,
+        "gold": 10,
+        "silver": 47,
+        "bronze": 0
+      },
+      "achievementsCurrent": 60,
+      "achievementsTotal": 77,
+      "rating": 10,
+      "review": "美术意境堪称巅峰造极",
+      "tags": [
+        "武士",
+        "开放世界",
+        "动作"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/ghost.ed3f7bbb.webp",
+      "coverUrl": "/media/covers/game/game-012-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_011",
+      "sourceId": 11,
+      "platform": "PlayStation",
+      "title": "战神：诸神黄昏",
+      "playTime": "69h",
+      "progress": 75,
+      "trophies": {
+        "platinum": 4,
+        "gold": 15,
+        "silver": 16,
+        "bronze": 0
+      },
+      "achievementsCurrent": 36,
+      "achievementsTotal": 48,
+      "rating": 10,
+      "review": "买ps5的玩的第一个游戏",
+      "tags": [
+        "动作",
+        "剧情",
+        "冒险"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/hear.fe4604d4.webp",
+      "coverUrl": "/media/covers/game/game-011-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_022",
+      "sourceId": 22,
+      "platform": "PlayStation",
+      "title": "漫威蜘蛛侠：迈尔斯·莫拉莱斯",
+      "playTime": "17.2h",
+      "progress": 73,
+      "trophies": {
+        "platinum": 0,
+        "gold": 1,
+        "silver": 7,
+        "bronze": 31
+      },
+      "achievementsCurrent": 28,
+      "achievementsTotal": 39,
+      "rating": 9,
+      "review": "代餐，不能当正餐吃",
+      "tags": [
+        "动作",
+        "开放世界",
+        "超级英雄"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/sppppdr.430ee0b0.webp",
+      "coverUrl": "/media/covers/game/game-022-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_003",
+      "sourceId": 3,
+      "platform": "PlayStation",
+      "title": "碧蓝幻想 Relink",
+      "playTime": "48h",
+      "progress": 69,
+      "trophies": {
+        "platinum": 0,
+        "gold": 2,
+        "silver": 35,
+        "bronze": 0
+      },
+      "achievementsCurrent": 37,
+      "achievementsTotal": 54,
+      "rating": 8,
+      "review": "二次元战斗游戏天花板",
+      "tags": [
+        "联机",
+        "ARPG",
+        "奇幻"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/bl.241cf46b.webp",
+      "coverUrl": "/media/covers/game/game-003-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_015",
+      "sourceId": 15,
+      "platform": "PlayStation",
+      "title": "卧龙：苍天陨落",
+      "playTime": "29.9h",
+      "progress": 64,
+      "trophies": {
+        "platinum": 0,
+        "gold": 2,
+        "silver": 10,
+        "bronze": 38
+      },
+      "achievementsCurrent": 32,
+      "achievementsTotal": 50,
+      "rating": 8,
+      "review": "有中文配音",
+      "tags": [
+        "魂系",
+        "动作",
+        "三国"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/drong.6e1f6b64.webp",
+      "coverUrl": "/media/covers/game/game-015-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_002",
+      "sourceId": 2,
+      "platform": "PlayStation",
+      "title": "剑星",
+      "playTime": "51h",
+      "progress": 62,
+      "trophies": {
+        "platinum": 1,
+        "gold": 6,
+        "silver": 21,
+        "bronze": 0
+      },
+      "achievementsCurrent": 28,
+      "achievementsTotal": 45,
+      "rating": 9,
+      "review": "还是代餐",
+      "tags": [
+        "动作",
+        "RPG",
+        "科幻"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/header_tchinese.b7cb7787.webp",
+      "coverUrl": "/media/covers/game/game-002-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_006",
+      "sourceId": 6,
+      "platform": "PlayStation",
+      "title": "伊苏8：达娜的安魂曲",
+      "playTime": "43h",
+      "progress": 51,
+      "trophies": {
+        "platinum": 0,
+        "gold": 3,
+        "silver": 25,
+        "bronze": 0
+      },
+      "achievementsCurrent": 28,
+      "achievementsTotal": 55,
+      "rating": 9,
+      "review": "jrpg我只玩伊苏系列本作剧情很棒",
+      "tags": [
+        "ARPG",
+        "冒险",
+        "音乐"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/ys.52526eb4.webp",
+      "coverUrl": "/media/covers/game/game-006-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_008",
+      "sourceId": 8,
+      "platform": "PlayStation",
+      "title": "最后生还者2",
+      "playTime": "34h",
+      "progress": 43,
+      "trophies": {
+        "platinum": 1,
+        "gold": 7,
+        "silver": 11,
+        "bronze": 0
+      },
+      "achievementsCurrent": 19,
+      "achievementsTotal": 44,
+      "rating": 10,
+      "review": "说不好玩的都是云狗",
+      "tags": [
+        "生存",
+        "剧情",
+        "末世"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/lost.2b687ca5.webp",
+      "coverUrl": "/media/covers/game/game-008-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_005",
+      "sourceId": 5,
+      "platform": "PlayStation",
+      "title": "最终幻想16",
+      "playTime": "45h",
+      "progress": 42,
+      "trophies": {
+        "platinum": 1,
+        "gold": 2,
+        "silver": 26,
+        "bronze": 0
+      },
+      "achievementsCurrent": 29,
+      "achievementsTotal": 69,
+      "rating": 9,
+      "review": "boss战大型交响乐现场",
+      "tags": [
+        "JRPG",
+        "奇幻",
+        "史诗"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/zz.e94ab16e.webp",
+      "coverUrl": "/media/covers/game/game-005-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_001",
+      "sourceId": 1,
+      "platform": "PlayStation",
+      "title": "破晓传奇",
+      "playTime": "57h",
+      "progress": 37,
+      "trophies": {
+        "platinum": 1,
+        "gold": 2,
+        "silver": 19,
+        "bronze": 0
+      },
+      "achievementsCurrent": 22,
+      "achievementsTotal": 59,
+      "rating": 9,
+      "review": "我也不知道我为啥玩儿了五十个小时",
+      "tags": [
+        "JRPG",
+        "剧情",
+        "动画"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/pox.a91be9df.webp",
+      "coverUrl": "/media/covers/game/game-001-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_017",
+      "sourceId": 17,
+      "platform": "PlayStation",
+      "title": "刺客信条：影",
+      "playTime": "25.6h",
+      "progress": 30,
+      "trophies": {
+        "platinum": 0,
+        "gold": 2,
+        "silver": 17,
+        "bronze": 0
+      },
+      "achievementsCurrent": 15,
+      "achievementsTotal": 50,
+      "rating": 8,
+      "review": "上当了浪费二十个小时",
+      "tags": [
+        "潜行",
+        "历史",
+        "忍者"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/cike.f7025edb.webp",
+      "coverUrl": "/media/covers/game/game-017-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_020",
+      "sourceId": 20,
+      "platform": "PlayStation",
+      "title": "最后生还者1",
+      "playTime": "22.2h",
+      "progress": 28,
+      "trophies": {
+        "platinum": 0,
+        "gold": 2,
+        "silver": 8,
+        "bronze": 0
+      },
+      "achievementsCurrent": 8,
+      "achievementsTotal": 29,
+      "rating": 10,
+      "review": "神，不用多说",
+      "tags": [
+        "生存",
+        "剧情",
+        "末世"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/amz.d120a8ec.webp",
+      "coverUrl": "/media/covers/game/game-020-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    },
+    {
+      "id": "game_ps_019",
+      "sourceId": 19,
+      "platform": "PlayStation",
+      "title": "神秘海域：盗贼传奇合辑",
+      "playTime": "24.5h",
+      "progress": 19,
+      "trophies": {
+        "platinum": 0,
+        "gold": 2,
+        "silver": 23,
+        "bronze": 0
+      },
+      "achievementsCurrent": 12,
+      "achievementsTotal": 63,
+      "rating": 9,
+      "review": "无敌了游戏还能这么做吗",
+      "tags": [
+        "冒险",
+        "动作",
+        "剧情"
+      ],
+      "sourceCoverUrl": "https://cdn.xn--cckl9nsb.com/game/thief.754ceabe.webp",
+      "coverUrl": "/media/covers/game/game-019-v1.webp",
+      "sourceUrl": "https://xn--cckl9nsb.com/game/playstation"
+    }
+  ]
+}

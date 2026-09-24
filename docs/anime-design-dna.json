@@ -1,0 +1,380 @@
+{
+  "meta": {
+    "name": "Life Ledger — Private Anime Memory Archive",
+    "description": "A private single-user ledger whose product UI adapts the editorial composition, character imagery, motion language, and interaction metaphors of the anime sites stored in Pro UI.",
+    "source_references": [
+      "C:/Users/汪家俊/proui/mono-weekend-photo-clone",
+      "C:/Users/汪家俊/proui/kakekoi-home-clone",
+      "C:/Users/汪家俊/proui/kakekoi-clone",
+      "C:/Users/汪家俊/proui/chiramune-clone",
+      "C:/Users/汪家俊/proui/bocchi-rocks-clone",
+      "C:/Users/汪家俊/proui/emilia-domain"
+    ],
+    "created_at": "2026-07-26"
+  },
+  "design_system": {
+    "color": {
+      "palette_type": "split-complementary",
+      "primary": {
+        "hex": "#159CF4",
+        "role": "Chiramune-derived sky blue for active navigation, atmosphere, and primary data focus"
+      },
+      "secondary": {
+        "hex": "#FF8A00",
+        "role": "Chiramune-derived orange for dates, warnings, and editorial punctuation"
+      },
+      "accent": {
+        "hex": "#FF4FA3",
+        "role": "Bocchi-derived hot pink for creation actions, ratings, and playful feedback"
+      },
+      "neutral": {
+        "scale": "#FFFFFF, #F4F8FC, #DDE7F0, #8290A3, #151925, #090B12",
+        "usage": "White editorial rail and readable data surfaces over cool blue-black foundations"
+      },
+      "semantic": {
+        "success": "#25C7A5",
+        "warning": "#FFB21A",
+        "error": "#FF4D6D",
+        "info": "#159CF4"
+      },
+      "surface": {
+        "background": "#EDF6FC",
+        "card": "rgba(255,255,255,0.88)",
+        "elevated": "#FFFFFF"
+      },
+      "contrast_strategy": "high-contrast ink on white, with saturated blue/pink image-led zones"
+    },
+    "typography": {
+      "type_scale": {
+        "display": {
+          "size": "clamp(3.4rem, 7.2vw, 7.8rem)",
+          "weight": "600",
+          "line_height": "0.88",
+          "tracking": "-0.065em"
+        },
+        "heading_1": {
+          "size": "clamp(2.2rem, 4.8vw, 5.4rem)",
+          "weight": "650",
+          "line_height": "0.95",
+          "tracking": "-0.045em"
+        },
+        "heading_2": {
+          "size": "clamp(1.65rem, 2.8vw, 3rem)",
+          "weight": "650",
+          "line_height": "1.02",
+          "tracking": "-0.03em"
+        },
+        "heading_3": {
+          "size": "1.1rem",
+          "weight": "700",
+          "line_height": "1.35",
+          "tracking": "-0.015em"
+        },
+        "body": {
+          "size": "0.94rem",
+          "weight": "450",
+          "line_height": "1.72",
+          "tracking": "0"
+        },
+        "body_small": {
+          "size": "0.82rem",
+          "weight": "500",
+          "line_height": "1.55",
+          "tracking": "0"
+        },
+        "caption": {
+          "size": "0.68rem",
+          "weight": "650",
+          "line_height": "1.35",
+          "tracking": "0.08em"
+        },
+        "overline": {
+          "size": "0.64rem",
+          "weight": "750",
+          "line_height": "1",
+          "tracking": "0.2em"
+        }
+      },
+      "font_families": {
+        "heading": "Cormorant Garamond, Noto Serif SC, Songti SC, serif",
+        "body": "Jost, Noto Sans SC, Microsoft YaHei, sans-serif",
+        "mono": "SFMono-Regular, Consolas, monospace"
+      },
+      "font_style_notes": "Kakekoi editorial serif for large titles; Jost-like geometric sans for controls; occasional vertical CJK title columns."
+    },
+    "spacing": {
+      "base_unit": "4px",
+      "scale": "4, 8, 12, 16, 24, 32, 48, 72, 104",
+      "content_density": "comfortable",
+      "section_rhythm": "Alternates immersive 55–72vh image-led sections with compact, highly legible data clusters"
+    },
+    "layout": {
+      "grid_system": "Fixed 284px editorial navigation rail plus fluid content canvas; asymmetric 5/7 and 4/8 content splits",
+      "max_content_width": "1480px",
+      "columns": "12",
+      "gutter": "clamp(18px, 2.4vw, 38px)",
+      "breakpoints": "680px, 920px, 1180px, 1540px",
+      "alignment_tendency": "asymmetric"
+    },
+    "shape": {
+      "border_radius": {
+        "small": "6px",
+        "medium": "14px",
+        "large": "28px",
+        "pill": "999px"
+      },
+      "border_usage": "hairline dark rules on white surfaces, plus occasional slanted clipping",
+      "divider_style": "thin ink rule with orange or pink editorial marker"
+    },
+    "elevation": {
+      "shadow_style": "soft diffused",
+      "levels": {
+        "low": "0 8px 24px rgba(17,39,70,.08)",
+        "medium": "0 22px 70px rgba(12,35,66,.16)",
+        "high": "0 38px 120px rgba(4,14,32,.3)"
+      },
+      "depth_cues": "overlapping character art, translucent panels, blur, and strong foreground/background scale changes"
+    },
+    "iconography": {
+      "style": "thin-line functional icons contained by square or circular anime-site controls",
+      "stroke_weight": "1.7–2",
+      "size_scale": "14, 18, 22",
+      "preferred_set": "Lucide with custom CSS treatment"
+    },
+    "motion": {
+      "easing": "cubic-bezier(.22,1,.36,1)",
+      "duration_scale": {
+        "micro": "140ms",
+        "normal": "280ms",
+        "macro": "650ms"
+      },
+      "entrance_pattern": "clip-reveal or fade-up with small stagger; character art drifts from the opposite side",
+      "exit_pattern": "fast opacity and 8px translate",
+      "philosophy": "cinematic"
+    },
+    "components": {
+      "button_style": "ink or hot-pink action blocks with an offset shadow and occasional diagonal corner",
+      "input_style": "white translucent fields with a dark bottom rule, strong focus ring, and minimal radius",
+      "card_style": "image-led editorial panels, chat bubbles, or white ruled sheets; avoid one universal rounded card",
+      "navigation_pattern": "Kakekoi-derived fixed white title rail with thin list navigation",
+      "modal_style": "Kakekoi-special-derived phone/chat panel over a blurred cool-blue scene",
+      "list_style": "timeline spine with alternating accent markers and message-like content panels",
+      "component_notes": "Privacy states remain unmistakable, but semantic colors are rendered as saturated anime-site labels rather than pastel SaaS badges."
+    }
+  },
+  "design_style": {
+    "aesthetic": {
+      "mood": [
+        "private",
+        "dreamlike",
+        "editorial",
+        "energetic",
+        "nostalgic"
+      ],
+      "visual_metaphor": "A personal anime opening sequence crossed with a private message archive",
+      "era_influence": "Contemporary Japanese anime promotional sites with print-editorial typography",
+      "genre": "anime editorial archive",
+      "personality_traits": [
+        "intimate",
+        "precise",
+        "expressive",
+        "slightly theatrical"
+      ],
+      "adjectives": [
+        "icy-blue",
+        "image-led",
+        "vertical",
+        "cinematic",
+        "playful"
+      ]
+    },
+    "visual_language": {
+      "complexity": "rich",
+      "ornamentation": "decorative",
+      "whitespace_usage": "Large Kakekoi-like white fields surround compact data and create tension against full-bleed character scenes",
+      "visual_weight_distribution": "Fixed light rail on the left, immersive color and art on the right, with isolated hot accent controls",
+      "focal_strategy": "progressive reveal",
+      "contrast_level": "high",
+      "texture_usage": "subtle paper noise, bubbles, ink patterns, and soft photographic bloom"
+    },
+    "composition": {
+      "hierarchy_method": "scale contrast",
+      "balance_type": "asymmetric",
+      "flow_direction": "left navigation rail to image field, then vertically down a timeline spine",
+      "grouping_strategy": "editorial rules, color punctuation, and deliberate overlap instead of repeated card containers",
+      "negative_space_role": "Creates privacy, calm, and a manga-panel pause between dense records"
+    },
+    "imagery": {
+      "photo_treatment": "cool bloom, soft contrast, selective dark overlays for text",
+      "illustration_style": "real anime key visuals and line art from Pro UI sources",
+      "graphic_elements": "bubbles, vertical kanji, offset labels, thin ruled lines, and diagonal corner cuts",
+      "pattern_usage": "low-opacity Kakekoi ink/noise and Chiramune bubble particles",
+      "image_shape": "full-bleed crops, tall character panels, and occasional slanted masks"
+    },
+    "interaction_feel": {
+      "feedback_style": "snappy color inversion with a small offset or scale response",
+      "hover_behavior": "art zooms slightly while labels slide and underline rules extend",
+      "transition_personality": "smooth glide",
+      "loading_style": "short anime-title shutter rather than an indefinite skeleton",
+      "microinteraction_density": "medium"
+    },
+    "brand_voice_in_ui": {
+      "tone": "intimate and direct",
+      "formality": "personal",
+      "cta_style": "friendly invitation",
+      "empty_state_approach": "a quiet scene card with one clear next action",
+      "error_tone": "plain, calm, and specific without breaking the visual world"
+    }
+  },
+  "visual_effects": {
+    "overview": {
+      "effect_intensity": "moderate",
+      "performance_tier": "lightweight",
+      "fallback_strategy": "Disable drift, blur, and clip entrances under prefers-reduced-motion while preserving composition and contrast",
+      "primary_technology": "CSS only"
+    },
+    "background_effects": {
+      "type": "noise-field",
+      "description": "Cool sky gradients and character key visuals are layered with Kakekoi noise and subtle radial bloom",
+      "technology": "CSS gradients and background images",
+      "params": {
+        "color_palette": "#159CF4, #7FE7FF, #C9B8FF, #FF4FA3, #090B12",
+        "speed": "18–26s drift loops",
+        "density": "low",
+        "opacity": "0.04–0.16",
+        "blend_mode": "soft-light"
+      }
+    },
+    "particle_systems": {
+      "enabled": true,
+      "type": "custom",
+      "description": "A small number of Chiramune bubble PNGs drift around selected hero and empty-state regions",
+      "technology": "CSS pseudo-elements and keyframes",
+      "params": {
+        "count": "4–8 per immersive region",
+        "shape": "transparent anime bubble assets",
+        "size_range": "18–96px",
+        "movement_pattern": "slow upward drift with lateral sway",
+        "color_behavior": "source artwork colors",
+        "interaction": "none",
+        "spawn_area": "hero edges and modal backdrop"
+      }
+    },
+    "3d_elements": {
+      "enabled": false,
+      "type": "scene-bg",
+      "description": "No production 3D dependency; Emilia atmosphere is translated into 2D layers",
+      "technology": "CSS",
+      "params": {
+        "renderer": "none",
+        "lighting": "baked into source art",
+        "camera": "none",
+        "materials": "none",
+        "geometry": "none",
+        "post_processing": [],
+        "interaction_model": "none"
+      }
+    },
+    "shader_effects": {
+      "enabled": false,
+      "type": "custom-GLSL",
+      "description": "The product does not carry the Emilia WebGL sequence into the authenticated data UI",
+      "technology": "none",
+      "params": {
+        "uniforms": "none",
+        "vertex_manipulation": "none",
+        "fragment_output": "none",
+        "noise_type": "fbm",
+        "distortion": "none"
+      }
+    },
+    "scroll_effects": {
+      "parallax": {
+        "enabled": true,
+        "layers": "background art, translucent wash, foreground copy",
+        "depth_range": "0–20px",
+        "speed_curve": "very subtle"
+      },
+      "scroll_triggered_animations": {
+        "enabled": true,
+        "trigger_points": "first reveal of major sections",
+        "animation_type": "clip-reveal",
+        "scrub_behavior": "none"
+      },
+      "scroll_morphing": {
+        "enabled": false,
+        "description": "Avoided to keep data navigation deterministic"
+      }
+    },
+    "text_effects": {
+      "type": "gradient-fill",
+      "description": "Display titles alternate ink, sky blue, orange, and pink while vertical side labels use a restrained fade",
+      "technology": "CSS",
+      "params": {
+        "split_strategy": "by-line",
+        "animation_per_unit": "opacity and 14px translate",
+        "stagger": "70ms",
+        "effect_style": "editorial title reveal"
+      }
+    },
+    "cursor_effects": {
+      "enabled": false,
+      "type": "none",
+      "description": "Native cursor retained for accessibility and tool-like precision",
+      "params": {
+        "shape": "native",
+        "size": "native",
+        "blend_mode": "normal",
+        "trail": "none",
+        "interaction_zone": "none"
+      }
+    },
+    "image_effects": {
+      "type": "reveal-clip",
+      "description": "Hero and library art enters through vertical or diagonal clipping and gently scales on hover",
+      "technology": "CSS",
+      "params": {
+        "filter_pipeline": "saturate(1.04) contrast(1.02)",
+        "hover_transform": "scale(1.025)",
+        "reveal_animation": "clip-path inset",
+        "distortion_type": "none"
+      }
+    },
+    "glassmorphism_neumorphism": {
+      "enabled": true,
+      "style": "frosted-layers",
+      "params": {
+        "blur_radius": "18px",
+        "transparency": "0.78–0.92",
+        "border_treatment": "1px white/ink hairline depending on background",
+        "shadow_type": "soft diffused",
+        "light_source_angle": "top-left"
+      }
+    },
+    "canvas_drawings": {
+      "enabled": false,
+      "type": "none",
+      "description": "Chiramune Canvas behavior is represented with lightweight CSS particles in the product shell",
+      "technology": "none",
+      "params": {
+        "draw_method": "none",
+        "animation_loop": "none",
+        "color_scheme": "source artwork",
+        "responsiveness": "CSS breakpoints",
+        "interaction": "none"
+      }
+    },
+    "svg_animations": {
+      "enabled": false,
+      "type": "none",
+      "description": "Icons use normal CSS transitions; no animated SVG dependency",
+      "params": {
+        "animation_method": "none",
+        "path_morphing": "none",
+        "stroke_animation": "none",
+        "filter_effects": "none"
+      }
+    },
+    "composite_notes": "The product preserves the source sites' composition and emotional cadence while all controls, labels, privacy states, and content are specialized for Life Ledger."
+  }
+}
