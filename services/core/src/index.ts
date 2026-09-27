@@ -1990,7 +1990,8 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
         .all<YearReviewEntryRow>(),
       this.env.DB.prepare(`
         SELECT mw.id AS media_work_id, mw.canonical_title AS title,
-          mw.media_type, mw.cover_url, e.occurred_at, ml.score_100
+          mw.media_type, mw.cover_url, e.occurred_at, e.date_precision, ml.progress_state,
+          ml.rating_scope, ml.score_100
         FROM media_logs ml
         INNER JOIN entries e ON e.id = ml.entry_id
         INNER JOIN media_works mw ON mw.id = ml.media_work_id

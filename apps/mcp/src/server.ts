@@ -392,7 +392,13 @@ function compactYearReview(review: YearReview) {
     moods: review.moods.counts,
     topTags: review.topTags,
     firstEntry: review.firstEntry,
-    works: review.works.map(({ title, mediaType, score, logCount }) => ({ title, mediaType, score, logCount })),
+    works: review.works.map(({ title, mediaType, score, logCount, completedOn }) => ({
+      title,
+      mediaType,
+      score,
+      logCount,
+      completedOn,
+    })),
     books: review.books.map((book) => ({
       id: book.id,
       title: book.title,

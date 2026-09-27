@@ -12,6 +12,15 @@ function moodName(mood: string): string {
   return MOOD_PRESETS.find((preset) => preset.emoji === mood)?.label ?? "心情";
 }
 
+/** "2026-07-05" → "7月5日", "2026-07" → "7月", "2026" → "今年". */
+function completedLabel(date: string): string {
+  if (date.length === 4) {
+    return "今年";
+  }
+  const month = `${Number(date.slice(5, 7))}月`;
+  return date.length === 7 ? month : `${month}${Number(date.slice(8, 10))}日`;
+}
+
 /** Sequential blue ramp (validated ordinal steps 250 → 650). */
 function heatLevel(count: number): number {
   if (count <= 0) return 0;
@@ -354,7 +363,11 @@ export function ReviewPage({ onOpenEntry }: { onOpenEntry: (id: string) => void 
                     <Tv aria-hidden="true" size={17} />
                     看过的番剧与影视
                   </h2>
-                  <p>{review.works.length} 部作品，按今年给的分排序。</p>
+                  <p>
+                    {review.works.length} 部作品，其中{" "}
+                    {review.works.filter((work) => work.completedOn !== null).length}{" "}
+                    部今年看完；看完的排前面，再按今年给的分排序。
+                  </p>
                 </div>
               </header>
               <ul className="rv-shelf">
@@ -364,7 +377,9 @@ export function ReviewPage({ onOpenEntry }: { onOpenEntry: (id: string) => void 
                     <strong>{work.title}</strong>
                     <span>
                       {work.score !== null ? `★${work.score.toFixed(1)} · ` : ""}
-                      {work.logCount} 条记录
+                      {work.completedOn
+                        ? `${completedLabel(work.completedOn)}看完`
+                        : `${work.logCount} 条记录`}
                     </span>
                   </li>
                 ))}

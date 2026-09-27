@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildYearReview, type YearReviewEntryRow } from "./year-review";
+import {
+  buildYearReview,
+  type YearReviewEntryRow,
+  type YearReviewMediaRow,
+} from "./year-review";
 
 function row(overrides: Partial<YearReviewEntryRow>): YearReviewEntryRow {
   return {
@@ -10,6 +14,21 @@ function row(overrides: Partial<YearReviewEntryRow>): YearReviewEntryRow {
     date_precision: "exact",
     tags_json: "[]",
     excerpt: "",
+    ...overrides,
+  };
+}
+
+function log(overrides: Partial<YearReviewMediaRow>): YearReviewMediaRow {
+  return {
+    media_work_id: "w",
+    title: "Re:Zero",
+    media_type: "anime",
+    cover_url: null,
+    occurred_at: "2026-05-01T00:00:00Z",
+    date_precision: "exact",
+    progress_state: null,
+    rating_scope: "work",
+    score_100: null,
     ...overrides,
   };
 }
@@ -59,15 +78,58 @@ describe("buildYearReview", () => {
       years: [2026],
       entries: [],
       media: [
-        { media_work_id: "w", title: "Re:Zero", media_type: "anime", cover_url: null, occurred_at: "2026-05-01T00:00:00Z", score_100: 80 },
-        { media_work_id: "w", title: "Re:Zero", media_type: "anime", cover_url: null, occurred_at: "2026-06-01T00:00:00Z", score_100: 95 },
+        log({ occurred_at: "2026-05-01T00:00:00Z", score_100: 80 }),
+        log({ occurred_at: "2026-06-01T00:00:00Z", score_100: 95 }),
+        // An episode score does not replace the work score.
+        log({ occurred_at: "2026-07-01T00:00:00Z", score_100: 40, rating_scope: "episode" }),
       ],
       books: [],
       music: [],
       places: [],
     });
     expect(review.works).toEqual([
-      expect.objectContaining({ mediaWorkId: "w", logCount: 2, score: 9.5 }),
+      expect.objectContaining({ mediaWorkId: "w", logCount: 3, score: 9.5, completedOn: null }),
     ]);
+  });
+
+  it("lists every work seen this year, unscored and finished ones first", () => {
+    const scoredInProgress = Array.from({ length: 13 }, (_, index) =>
+      log({ media_work_id: `w${index}`, title: `W${index}`, progress_state: "watching", score_100: 90 }),
+    );
+    const review = buildYearReview({
+      year: 2026,
+      timezone: "Asia/Tokyo",
+      years: [2026],
+      entries: [],
+      media: [
+        ...scoredInProgress,
+        // 2026-07-05 22:00 in Tokyo, finished without a score.
+        log({
+          media_work_id: "hyouka",
+          title: "冰菓",
+          occurred_at: "2026-07-05T13:00:00Z",
+          progress_state: "completed",
+        }),
+        log({
+          media_work_id: "toxin",
+          title: "婚姻剧毒",
+          occurred_at: "2026-07-20T00:00:00Z",
+          date_precision: "month",
+          progress_state: "watched",
+        }),
+        // Only on the want-to-watch list.
+        log({ media_work_id: "planned", title: "想看", progress_state: "planned" }),
+      ],
+      books: [],
+      music: [],
+      places: [],
+    });
+
+    expect(review.works).toHaveLength(15);
+    expect(review.works.slice(0, 2)).toEqual([
+      expect.objectContaining({ mediaWorkId: "hyouka", score: null, completedOn: "2026-07-05" }),
+      expect.objectContaining({ mediaWorkId: "toxin", score: null, completedOn: "2026-07" }),
+    ]);
+    expect(review.works.some((work) => work.mediaWorkId === "planned")).toBe(false);
   });
 });

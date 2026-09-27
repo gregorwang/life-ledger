@@ -1348,8 +1348,13 @@ export interface YearReviewWork {
   mediaType: MediaType;
   coverUrl: string | null;
   logCount: number;
-  /** Latest score given this year, 0–10. */
+  /** Latest work or season score given this year, 0–10. */
   score: number | null;
+  /**
+   * Local date of the last log this year that marked it finished, cut to
+   * the precision it was recorded with (YYYY-MM-DD, YYYY-MM or YYYY).
+   */
+  completedOn: string | null;
 }
 
 export interface YearReview {

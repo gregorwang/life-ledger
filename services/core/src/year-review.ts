@@ -25,8 +25,14 @@ export interface YearReviewMediaRow {
   media_type: MediaType;
   cover_url: string | null;
   occurred_at: string;
+  date_precision: string;
+  progress_state: string | null;
+  rating_scope: string | null;
   score_100: number | null;
 }
+
+/** Log states that mean the work (or season) was finished on that day. */
+const FINISHED_STATES = new Set(["completed", "watched"]);
 
 const HIDDEN_TAGS = new Set([
   "anime",
@@ -127,7 +133,9 @@ export function buildYearReview(input: {
   for (const row of [...input.media].sort((left, right) =>
     left.occurred_at.localeCompare(right.occurred_at),
   )) {
-    if (!localDateKey(row.occurred_at, input.timezone).startsWith(prefix)) {
+    const date = localDateKey(row.occurred_at, input.timezone);
+    // A "planned" log is a wish, not something watched this year.
+    if (!date.startsWith(prefix) || row.progress_state === "planned") {
       continue;
     }
     const current = works.get(row.media_work_id) ?? {
@@ -137,10 +145,21 @@ export function buildYearReview(input: {
       coverUrl: row.cover_url,
       logCount: 0,
       score: null,
+      completedOn: null,
     };
     current.logCount += 1;
-    if (row.score_100 !== null) {
+    // An episode score says little about the whole work.
+    if (row.score_100 !== null && row.rating_scope !== "episode") {
       current.score = row.score_100 / 10;
+    }
+    if (row.progress_state !== null && FINISHED_STATES.has(row.progress_state)) {
+      // Keep only as much of the date as was actually recorded.
+      current.completedOn =
+        row.date_precision === "year"
+          ? date.slice(0, 4)
+          : row.date_precision === "month"
+            ? date.slice(0, 7)
+            : date;
     }
     works.set(row.media_work_id, current);
   }
@@ -167,12 +186,14 @@ export function buildYearReview(input: {
     firstEntry: first
       ? { id: first.row.id, occurredAt: first.row.occurred_at, excerpt: first.row.excerpt }
       : null,
-    works: [...works.values()]
-      .sort(
-        (left, right) =>
-          (right.score ?? -1) - (left.score ?? -1) || right.logCount - left.logCount,
-      )
-      .slice(0, 12),
+    // Every work, unscored ones included: finished before in-progress,
+    // then by score, then by how often it came up.
+    works: [...works.values()].sort(
+      (left, right) =>
+        Number(right.completedOn !== null) - Number(left.completedOn !== null) ||
+        (right.score ?? -1) - (left.score ?? -1) ||
+        right.logCount - left.logCount,
+    ),
     books: input.books,
     music: input.music,
     places: input.places,
