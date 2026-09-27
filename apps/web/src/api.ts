@@ -192,6 +192,8 @@ function mapWork(work: AnimeWorkSummary, index: number): AnimeWork {
     logCount: work.logCount,
     lastLoggedAt: work.lastLoggedAt,
     lastLoggedDatePrecision: work.lastLoggedDatePrecision,
+    completedAt: work.completedAt,
+    completedDatePrecision: work.completedDatePrecision,
     createdAt: work.createdAt,
     updatedAt: work.updatedAt,
     description: `${work.logCount} 条可追溯观看记录；公开与私人内容分开投影。`,
@@ -232,6 +234,8 @@ function mapScreenWork(work: MediaWorkSummary): ScreenWork | null {
     publicLogCount: work.publicLogCount,
     lastLoggedAt: work.lastLoggedAt,
     lastLoggedDatePrecision: work.lastLoggedDatePrecision,
+    completedAt: work.completedAt,
+    completedDatePrecision: work.completedDatePrecision,
   };
 }
 

@@ -34,6 +34,23 @@ export const MEDIA_WORK_AGGREGATE_SELECT = `
       ORDER BY latest.occurred_at DESC, latest.id ASC
       LIMIT 1
     ) AS last_logged_date_precision,
+    max(
+      CASE
+        WHEN e.status = 'active' AND ml.progress_state IN ('completed', 'watched')
+          THEN e.occurred_at
+        ELSE NULL
+      END
+    ) AS completed_at,
+    (
+      SELECT finished.date_precision
+      FROM media_logs finished_log
+      INNER JOIN entries finished ON finished.id = finished_log.entry_id
+      WHERE finished_log.media_work_id = mw.id
+        AND finished.status = 'active'
+        AND finished_log.progress_state IN ('completed', 'watched')
+      ORDER BY finished.occurred_at DESC, finished.id ASC
+      LIMIT 1
+    ) AS completed_date_precision,
     mw.created_at,
     mw.updated_at
   FROM media_works mw

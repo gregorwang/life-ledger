@@ -39,11 +39,11 @@ IP 白名单支持 IPv4 / IPv6 精确地址，以及可选的 IPv6 `/64` CIDR。
 | 场景 | 工具 |
 | --- | --- |
 | 记一句话、想法、心情、照片 | `capture_entry`（`mood` 传表情，`aboutId` 关联书/歌/地点/游戏/番剧影视） |
-| 看番、看剧、看电影 | `log_media`（作品不存在自动创建；`mood` 同时记下当时的心情） |
+| 看番、看剧、看电影 | `log_media`（作品不存在自动创建；`mood` 同时记下当时的心情；看完传 `progressState=completed`，这条的日期就是看完日期） |
 | 书、专辑、单曲、歌单 | `save_shelf_item`（`addExcerpt` 追加摘抄/歌词） |
 | 去过的地方 | `save_place` |
 | 游戏 | `save_game` |
-| 作品封面、观看状态、总评分 | `save_media_work` |
+| 作品封面、观看状态、总评分 | `save_media_work`（改状态不会留下看完日期） |
 | 给动态补一句 / 改原文 | `add_follow_up` / `update_entry` |
 | 照片、视频 | `upload_photo`（≤ 10 MB，`purpose=post` 或 `cover`）/ `create_upload_url`（大文件）/ `attach_media` |
 | 找东西、查重 | `search_all`（动态、书、音乐、地点、游戏、番剧、影视一起搜） |

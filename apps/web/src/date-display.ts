@@ -41,3 +41,19 @@ export function formatOccurredAt(
   }).format(new Date(value));
 }
 
+
+/** A finish date: always shows the year, never a time of day. */
+export function formatCompletedOn(
+  value: string,
+  precision: DatePrecision,
+  timeZone: string,
+): string {
+  const { year, month, day } = dateParts(value, timeZone);
+  if (precision === "year") {
+    return `${year}年`;
+  }
+  if (precision === "month") {
+    return `约${year}年${month}月`;
+  }
+  return `${precision === "approximate" ? "约" : ""}${year}年${month}月${day}日`;
+}

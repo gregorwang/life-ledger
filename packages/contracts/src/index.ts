@@ -1251,6 +1251,9 @@ export interface AnimeWorkSummary {
   publicLogCount: number;
   lastLoggedAt: string | null;
   lastLoggedDatePrecision: DatePrecision | null;
+  /** When the latest completed/watched log happened; null if never finished. */
+  completedAt: string | null;
+  completedDatePrecision: DatePrecision | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1285,6 +1288,9 @@ export interface MediaWorkSummary {
   publicLogCount: number;
   lastLoggedAt: string | null;
   lastLoggedDatePrecision: DatePrecision | null;
+  /** When the latest completed/watched log happened; null if never finished. */
+  completedAt: string | null;
+  completedDatePrecision: DatePrecision | null;
   createdAt: string;
   updatedAt: string;
 }

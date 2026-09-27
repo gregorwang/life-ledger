@@ -519,7 +519,17 @@ describe("Life Ledger MCP 工具契约", () => {
       days: [{ date: "2026-01-01", count: 1 }],
       topTags: [],
       firstEntry: null,
-      works: [],
+      works: [
+        {
+          mediaWorkId: "work_hyouka",
+          title: "冰菓",
+          mediaType: "anime",
+          coverUrl: null,
+          logCount: 1,
+          score: null,
+          completedOn: "2026-07-05",
+        },
+      ],
       books: [{ id: "book_1", title: "三体", creator: "刘慈欣", rating: 9, finishedOn: "2026-09-01", excerpts: [{}] }],
       music: [],
       places: [],
@@ -539,6 +549,9 @@ describe("Life Ledger MCP 工具契约", () => {
       const data = JSON.parse(responseText(review)).data;
       expect(data.moods).toEqual([{ key: "😌", count: 2 }]);
       expect(data).not.toHaveProperty("days");
+      expect(data.works).toEqual([
+        { title: "冰菓", mediaType: "anime", score: null, logCount: 1, completedOn: "2026-07-05" },
+      ]);
       expect(data.books).toEqual([
         { id: "book_1", title: "三体", creator: "刘慈欣", rating: 9, finishedOn: "2026-09-01", excerpts: 1 },
       ]);

@@ -192,7 +192,10 @@ const logMediaToolSchema = z.object({
   ratingScope: z.enum(["episode", "season", "work"]).nullable().default(null).describe("评分针对单集/一季/整部"),
   seasonLabel: z.string().trim().min(1).max(80).nullable().default(null).describe("例如 第3季"),
   episodeLabel: z.string().trim().min(1).max(80).nullable().default(null).describe("例如 第4集"),
-  progressState: mediaWatchStatusSchema.nullable().default(null),
+  progressState: mediaWatchStatusSchema
+    .nullable()
+    .default(null)
+    .describe("看完一部/一季传 completed，这条的日期就是看完日期；只是想看传 planned"),
   comment: z.string().trim().max(50_000).nullable().default(null),
   mood: moodField,
   aliases: z.array(z.string().trim().min(1).max(300)).max(30).default([]),
@@ -582,7 +585,9 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "记一次看番/看剧/看电影",
       description:
-        "记录看了什么番剧或电影电视剧，可带集数、季、评分和评论；作品不存在会自动创建。电影电视剧用 mediaType=screen。用户提到当时的心情就用 mood 传一个表情。",
+        "记录看了什么番剧或电影电视剧，可带集数、季、评分和评论；作品不存在会自动创建。电影电视剧用 mediaType=screen。用户提到当时的心情就用 mood 传一个表情。" +
+        "看完一部（或一季）时传 progressState=completed，这条的 occurredAt 就是作品的看完日期，年度回顾和作品卡片都按它算，不打分也可以。" +
+        "补记以前看完的作品：occurredAt 填当时的日期，只记得月份/年份就把 datePrecision 设为 month / year。",
       inputSchema: logMediaToolSchema,
       annotations: { ...safeWriteAnnotations, idempotentHint: true },
     },
@@ -782,7 +787,8 @@ export function createServer(core: McpCoreBinding): McpServer {
     {
       title: "修改番剧/影视作品信息",
       description:
-        "修改作品的封面、观看状态、总评分、别名等；传 id 修改，不传 id 且给 mediaType + title 则新建。记录看了哪一集请用 log_media。",
+        "修改作品的封面、观看状态、总评分、别名等；传 id 修改，不传 id 且给 mediaType + title 则新建。记录看了哪一集请用 log_media。" +
+        "这里改成 completed 不会留下看完日期，也进不了年度回顾；要记看完日期请用 log_media 并传 progressState=completed。",
       inputSchema: saveMediaWorkToolSchema,
       annotations: safeWriteAnnotations,
     },

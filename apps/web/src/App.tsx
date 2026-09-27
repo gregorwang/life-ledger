@@ -131,7 +131,7 @@ import {
   sortAnimeWorks,
   type AnimeLibrarySort,
 } from "./anime-order";
-import { formatOccurredAt } from "./date-display";
+import { formatCompletedOn, formatOccurredAt } from "./date-display";
 
 const ROUTES = {
   timeline: "/",
@@ -426,6 +426,20 @@ function formatAnimeLastLoggedAt(work: AnimeWork): string | null {
     work.lastLoggedDatePrecision ?? "approximate",
     currentTimeZone(),
   );
+}
+
+/** "看完于 2026年7月5日" for works with a completed/watched log. */
+function formatWorkCompletedAt(
+  work: Pick<AnimeWork | ScreenWork, "completedAt" | "completedDatePrecision">,
+): string | null {
+  if (!work.completedAt) {
+    return null;
+  }
+  return `看完于 ${formatCompletedOn(
+    work.completedAt,
+    work.completedDatePrecision ?? "approximate",
+    currentTimeZone(),
+  )}`;
 }
 
 function hasSensitivePattern(value: string): boolean {
@@ -1919,6 +1933,12 @@ function AnimeLibraryPage({
                       ? `作品时间线 · ${formatAnimeLastLoggedAt(work)}`
                       : "暂无作品时间线"}
                   </span>
+                  {work.completedAt ? (
+                    <span className="anime-card-timeline">
+                      <Check aria-hidden="true" size={12} />
+                      {formatWorkCompletedAt(work)}
+                    </span>
+                  ) : null}
                 </span>
                 <span
                   className={`anime-card-score ${
@@ -2105,6 +2125,11 @@ function MoviesPage({
                   </div>
                   <h3>{work.title}</h3>
                   {work.aliases[0] ? <p>{work.aliases[0]}</p> : null}
+                  {work.completedAt ? (
+                    <p className="screen-work-completed">
+                      {formatWorkCompletedAt(work)}
+                    </p>
+                  ) : null}
                   <div className="screen-work-footer">
                     <div>
                       <span>私人评分</span>
@@ -2212,6 +2237,7 @@ function AnimeDetailPage({
                 ? `最后作品时间线 ${formatAnimeLastLoggedAt(work)}`
                 : "尚无观看日志"}
             </span>
+            {work.completedAt ? <span>{formatWorkCompletedAt(work)}</span> : null}
           </div>
           <h1>{work.title}</h1>
           <p className="anime-subtitle">{work.subtitle}</p>

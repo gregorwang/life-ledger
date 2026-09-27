@@ -97,6 +97,8 @@ export interface AnimeWork {
   logCount: number;
   lastLoggedAt: string | null;
   lastLoggedDatePrecision: DatePrecision | null;
+  completedAt: string | null;
+  completedDatePrecision: DatePrecision | null;
   createdAt: string;
   updatedAt: string;
   description: string;
@@ -122,6 +124,8 @@ export interface ScreenWork {
   publicLogCount: number;
   lastLoggedAt: string | null;
   lastLoggedDatePrecision: DatePrecision | null;
+  completedAt: string | null;
+  completedDatePrecision: DatePrecision | null;
 }
 
 export interface ExportRecord {

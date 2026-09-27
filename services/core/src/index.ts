@@ -270,6 +270,8 @@ interface AnimeAggregateRow {
   public_log_count: number;
   last_logged_at: string | null;
   last_logged_date_precision: EntrySummary["datePrecision"] | null;
+  completed_at: string | null;
+  completed_date_precision: EntrySummary["datePrecision"] | null;
   created_at: string;
   updated_at: string;
 }
@@ -288,6 +290,8 @@ interface MediaWorkAggregateRow {
   public_log_count: number;
   last_logged_at: string | null;
   last_logged_date_precision: EntrySummary["datePrecision"] | null;
+  completed_at: string | null;
+  completed_date_precision: EntrySummary["datePrecision"] | null;
   created_at: string;
   updated_at: string;
 }
@@ -694,6 +698,8 @@ function toAnimeSummary(row: AnimeAggregateRow): AnimeWorkSummary {
     publicLogCount: Number(row.public_log_count),
     lastLoggedAt: row.last_logged_at,
     lastLoggedDatePrecision: row.last_logged_date_precision,
+    completedAt: row.completed_at,
+    completedDatePrecision: row.completed_date_precision,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -714,6 +720,8 @@ function toMediaWorkSummary(row: MediaWorkAggregateRow): MediaWorkSummary {
     publicLogCount: Number(row.public_log_count),
     lastLoggedAt: row.last_logged_at,
     lastLoggedDatePrecision: row.last_logged_date_precision,
+    completedAt: row.completed_at,
+    completedDatePrecision: row.completed_date_precision,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -4544,6 +4552,23 @@ export default class LifeLedgerCore extends WorkerEntrypoint<Env> {
           ORDER BY latest.occurred_at DESC, latest.id ASC
           LIMIT 1
         ) AS last_logged_date_precision,
+        max(
+          CASE
+            WHEN e.status = 'active' AND ml.progress_state IN ('completed', 'watched')
+              THEN e.occurred_at
+            ELSE NULL
+          END
+        ) AS completed_at,
+        (
+          SELECT finished.date_precision
+          FROM media_logs finished_log
+          INNER JOIN entries finished ON finished.id = finished_log.entry_id
+          WHERE finished_log.media_work_id = mw.id
+            AND finished.status = 'active'
+            AND finished_log.progress_state IN ('completed', 'watched')
+          ORDER BY finished.occurred_at DESC, finished.id ASC
+          LIMIT 1
+        ) AS completed_date_precision,
         mw.created_at,
         mw.updated_at
       FROM media_works mw
