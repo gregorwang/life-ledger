@@ -543,9 +543,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (route.kind !== "movies") {
-      return;
-    }
     const controller = new AbortController();
     void loadScreenWorks(controller.signal)
       .then(setScreenWorks)
@@ -560,7 +557,7 @@ export function App() {
         );
       });
     return () => controller.abort();
-  }, [route.kind]);
+  }, []);
 
   const openCapture = () => {
     if (route.kind === "timeline") {
@@ -1100,6 +1097,7 @@ function renderRoute(props: RenderRouteProps): ReactNode {
           entryId={props.route.id}
           entries={props.entries}
           works={props.works}
+          screenWorks={props.screenWorks}
           settings={props.settings}
           navigate={props.navigate}
           onSoftDelete={props.onSoftDelete}
@@ -1115,6 +1113,7 @@ function renderRoute(props: RenderRouteProps): ReactNode {
         <SearchPage
           entries={props.entries}
           works={props.works}
+          screenWorks={props.screenWorks}
           navigate={props.navigate}
         />
       );
@@ -1449,8 +1448,10 @@ function TimelinePage(props: TimelinePageProps) {
       {publishing && publishingEntry ? (
         <PublishDialog
           entry={publishingEntry}
-          work={props.works.find(
-            (work) => work.id === publishingEntry.mediaWorkId,
+          work={findMediaWork(
+            props.works,
+            props.screenWorks,
+            publishingEntry.mediaWorkId,
           )}
           pendingAction={publishing.action}
           open
@@ -1482,9 +1483,29 @@ function TimelinePage(props: TimelinePageProps) {
   );
 }
 
+/** A card only needs a work's cover and title, which both catalogs carry. */
+type MediaWorkRef = Pick<
+  AnimeWork | ScreenWork,
+  "id" | "title" | "aliases" | "coverUrl"
+>;
+
+function findMediaWork(
+  works: AnimeWork[],
+  screenWorks: ScreenWork[],
+  workId: string | null | undefined,
+): MediaWorkRef | undefined {
+  if (!workId) {
+    return undefined;
+  }
+  return (
+    works.find((work) => work.id === workId) ??
+    screenWorks.find((work) => work.id === workId)
+  );
+}
+
 interface EntryCardProps {
   entry: LedgerEntry;
-  work: AnimeWork | undefined;
+  work: MediaWorkRef | undefined;
   onOpen: () => void;
   compact?: boolean;
   timestampKind?: "occurred" | "created";
@@ -1526,7 +1547,7 @@ function EntryCard({
           </time>
         </div>
         <div className="entry-card-content">
-          {work ? (
+          {work?.coverUrl ? (
             <img
               className="entry-cover"
               src={work.coverUrl}
@@ -2357,6 +2378,7 @@ interface EntryDetailPageProps {
   entryId: string;
   entries: LedgerEntry[];
   works: AnimeWork[];
+  screenWorks: ScreenWork[];
   settings: LedgerSettings;
   navigate: (path: string) => void;
   onSoftDelete: (entryId: string) => void;
@@ -2375,6 +2397,7 @@ function EntryDetailPage({
   entryId,
   entries,
   works,
+  screenWorks,
   settings,
   navigate,
   onSoftDelete,
@@ -2392,7 +2415,7 @@ function EntryDetailPage({
   const [pendingPublish, setPendingPublish] = useState<PendingAction | null>(
     null,
   );
-  const work = works.find((item) => item.id === entry?.mediaWorkId);
+  const work = findMediaWork(works, screenWorks, entry?.mediaWorkId);
   const sensitiveMatch = entry
     ? settings.sensitiveWarning && hasSensitivePattern(`${entry.title}\n${entry.bodyRaw}`)
     : false;
@@ -2679,7 +2702,7 @@ function EntryDetailPage({
 
 interface StructuredFieldsProps {
   entry: LedgerEntry;
-  work: AnimeWork | undefined;
+  work: MediaWorkRef | undefined;
 }
 
 function StructuredFields({ entry, work }: StructuredFieldsProps) {
@@ -2761,10 +2784,11 @@ function AuditList({ entry }: { entry: LedgerEntry }) {
 interface SearchPageProps {
   entries: LedgerEntry[];
   works: AnimeWork[];
+  screenWorks: ScreenWork[];
   navigate: (path: string) => void;
 }
 
-function SearchPage({ entries, works, navigate }: SearchPageProps) {
+function SearchPage({ entries, works, screenWorks, navigate }: SearchPageProps) {
   const [filters, setFilters] = useState<SearchFilters>({
     query: "",
     type: "all",
@@ -2776,7 +2800,7 @@ function SearchPage({ entries, works, navigate }: SearchPageProps) {
     if (entry.status !== "active") {
       return false;
     }
-    const work = works.find((item) => item.id === entry.mediaWorkId);
+    const work = findMediaWork(works, screenWorks, entry.mediaWorkId);
     const haystack = [
       entry.title,
       entry.bodyRaw,
@@ -2923,7 +2947,7 @@ function SearchPage({ entries, works, navigate }: SearchPageProps) {
                 compact
                 key={entry.id}
                 entry={entry}
-                work={works.find((work) => work.id === entry.mediaWorkId)}
+                work={findMediaWork(works, screenWorks, entry.mediaWorkId)}
                 onOpen={() => navigate(entryPath(entry.id))}
               />
             ))
@@ -4369,7 +4393,7 @@ function EditEntryDialog({
 
 interface PublishDialogProps {
   entry: LedgerEntry;
-  work: AnimeWork | undefined;
+  work: MediaWorkRef | undefined;
   pendingAction: PendingAction | null;
   open: boolean;
   onClose: () => void | Promise<void>;
@@ -4423,7 +4447,7 @@ function PublishDialog({
           </button>
         </header>
         <div className="public-preview-card">
-          {work ? (
+          {work?.coverUrl ? (
             <img
               src={work.coverUrl}
               alt=""
