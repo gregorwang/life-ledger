@@ -79,6 +79,7 @@ import type {
   EntryMediaItem,
   EntryType,
   LedgerEntry,
+  ScreenWork,
   SourceChannel,
   ToastMessage,
 } from "./models";
@@ -123,6 +124,7 @@ export interface NewPost {
 export interface TimelineFeedProps {
   entries: LedgerEntry[];
   works: AnimeWork[];
+  screenWorks?: ScreenWork[];
   timeZone: string;
   composerSignal: number;
   profile: LedgerProfile;
@@ -177,6 +179,10 @@ export function TimelineFeed(props: TimelineFeedProps) {
     () => new Map(works.map((work) => [work.id, work])),
     [works],
   );
+  const screenWorksById = useMemo(
+    () => new Map((props.screenWorks ?? []).map((work) => [work.id, work])),
+    [props.screenWorks],
+  );
 
   return (
     <div className="page feed-page">
@@ -216,6 +222,11 @@ export function TimelineFeed(props: TimelineFeedProps) {
                     work={
                       entry.mediaWorkId
                         ? worksById.get(entry.mediaWorkId)
+                        : undefined
+                    }
+                    screenWork={
+                      entry.mediaWorkId
+                        ? screenWorksById.get(entry.mediaWorkId)
                         : undefined
                     }
                     now={now}
@@ -814,6 +825,7 @@ function PostComposer({
 interface FeedPostProps extends TimelineFeedProps {
   entry: LedgerEntry;
   work: AnimeWork | undefined;
+  screenWork?: ScreenWork | undefined;
   now: Date;
   onOpenMedia: (index: number) => void;
 }
@@ -821,6 +833,7 @@ interface FeedPostProps extends TimelineFeedProps {
 function FeedPost({
   entry,
   work,
+  screenWork,
   now,
   timeZone,
   profile,
@@ -889,7 +902,12 @@ function FeedPost({
           <PostMediaGrid media={entry.media} onOpen={onOpenMedia} />
         ) : null}
         {isMediaLog ? (
-          <WorkCard entry={entry} work={work} onOpenWork={onOpenWork} />
+          <WorkCard
+            entry={entry}
+            work={work}
+            screenWork={screenWork}
+            onOpenWork={onOpenWork}
+          />
         ) : null}
         {entry.links.map((link) => (
           <LinkCard key={`${link.kind}:${link.id}`} link={link} onOpen={() => onOpenLink(link)} />
@@ -1118,10 +1136,12 @@ function PostMediaGrid({
 function WorkCard({
   entry,
   work,
+  screenWork,
   onOpenWork,
 }: {
   entry: LedgerEntry;
   work: AnimeWork | undefined;
+  screenWork?: ScreenWork | undefined;
   onOpenWork: (workId: string) => void;
 }) {
   const detail = [
@@ -1140,8 +1160,13 @@ function WorkCard({
   const label = entry.type === "anime" ? "番剧" : entry.mediaKind === "tv" ? "剧集" : "影视";
   const content = (
     <>
-      {work?.coverUrl ? (
-        <img src={work.coverUrl} alt="" loading="lazy" decoding="async" />
+      {(work ?? screenWork)?.coverUrl ? (
+        <img
+          src={(work ?? screenWork)?.coverUrl ?? ""}
+          alt=""
+          loading="lazy"
+          decoding="async"
+        />
       ) : (
         <span className="feed-work-placeholder" aria-hidden="true">
           {entry.type === "anime" ? <Tv size={22} /> : <Clapperboard size={22} />}
@@ -1156,7 +1181,7 @@ function WorkCard({
           )}
           {label}
         </small>
-        <strong>{work?.title ?? entry.title}</strong>
+        <strong>{(work ?? screenWork)?.title ?? entry.title}</strong>
         {detail ? <span>{detail}</span> : null}
       </span>
       {entry.score !== null ? (

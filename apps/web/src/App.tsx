@@ -1017,6 +1017,7 @@ function renderRoute(props: RenderRouteProps): ReactNode {
         <TimelinePage
           entries={props.entries}
           works={props.works}
+          screenWorks={props.screenWorks}
           settings={props.settings}
           composerSignal={props.composerSignal}
           navigate={props.navigate}
@@ -1363,6 +1364,7 @@ function StatusBadge({ visibility, status = "active" }: StatusBadgeProps) {
 interface TimelinePageProps {
   entries: LedgerEntry[];
   works: AnimeWork[];
+  screenWorks: ScreenWork[];
   settings: LedgerSettings;
   composerSignal: number;
   navigate: (path: string) => void;
@@ -1408,6 +1410,7 @@ function TimelinePage(props: TimelinePageProps) {
       <TimelineFeed
         entries={props.entries}
         works={props.works}
+        screenWorks={props.screenWorks}
         timeZone={currentTimeZone()}
         composerSignal={props.composerSignal}
         onCreatePost={props.onCreatePost}
